@@ -1,0 +1,20 @@
+[project]
+name = "fckahleaf-tools"
+version = "0.1.0"
+description = "Host tools for the Nanoleaf Canvas panel bus probe"
+requires-python = ">=3.9"
+dependencies = ["pyserial>=3.5"]
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tools", "pico/test"]
+pythonpath = ["tools"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"

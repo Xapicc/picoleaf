@@ -1,0 +1,8 @@
+# Vendor firmware images: ~540 MB and Nanoleaf's copyright. Checksums and manifest are tracked instead.
+firmware/**/*.firmware
+
+pico/build/
+.venv/
+__pycache__/
+
+pico/backup/

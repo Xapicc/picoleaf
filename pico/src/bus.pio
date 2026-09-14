@@ -1,0 +1,90 @@
+; Canvas panel bus programs. All three state machines share one GPIO.
+
+; Half-duplex UART transmitter, push-pull, 8N1, LSB first, 8 cycles per bit.
+; The pin is driven only while bytes are queued. Once the TX FIFO is empty after
+; a stop bit the driver is released, so a panel can answer on the same wire.
+; The output latch must be preset high (idle level) before the first byte.
+.program bus_tx_pp
+.side_set 1 opt pindirs
+
+.wrap_target
+release:
+    pull                side 0      ; release the line, wait for a byte
+next_byte:
+    set x, 7            side 1      ; take the line, still at idle-high
+    set pins, 0             [7]     ; start bit
+bitloop:
+    out pins, 1                     ; data bit
+    jmp x-- bitloop         [6]
+    set pins, 1             [6]     ; stop bit, stretched by the checks below
+    mov y, status                   ; all ones when the TX FIFO is empty
+    jmp !y more
+    jmp release
+more:
+    pull
+    jmp next_byte
+.wrap
+
+
+; Open-drain variant. The output latch is held low and each bit is written to
+; the pin direction: direction 1 pulls the line low, 0 releases it. The host
+; side pushes inverted bytes so that a 0 data bit becomes "pull low".
+; Relies on a pull-up somewhere on the line (panel side or `pull up`).
+.program bus_tx_od
+
+.wrap_target
+    pull                            ; line released while idle
+    set x, 7
+    set pindirs, 1          [7]     ; start bit
+bitloop:
+    out pindirs, 1                  ; inverted data bit
+    jmp x-- bitloop         [6]
+    set pindirs, 0          [7]     ; stop bit
+.wrap
+
+
+; Edge recorder. X is a free-running countdown that drops by one every two
+; cycles on every path, including the edge handling below, so the value pushed
+; at each level change is a timestamp and rounding never accumulates across
+; edges. The CPU turns consecutive timestamps into durations. The first word is
+; a marker: 0 = line started low, 1 = started high. Never drives the pin.
+.program edge_capture
+
+    jmp pin start_high
+    mov isr, null
+    push                            ; marker: starts low
+    mov x, ~null
+    jmp low_loop
+start_high:
+    set x, 1
+    mov isr, x
+    push                            ; marker: starts high
+    mov x, ~null
+    jmp high_loop
+
+low_loop:
+    jmp pin low_edge
+    jmp x-- low_loop
+    jmp low_loop                    ; X wrapped (every ~68 s): one cycle lost
+low_edge:                           ; 6 cycles, 3 decrements
+    mov isr, x
+    jmp x-- low_edge_push
+low_edge_push:
+    push
+    jmp x-- low_edge_done
+low_edge_done:
+    jmp x-- high_loop
+
+high_loop:                          ; also reached by fall-through from low_edge_done
+    jmp pin high_stay
+    mov isr, x                      ; fell low: 6 cycles, 3 decrements
+    jmp x-- high_edge_push
+high_edge_push:
+    push
+    jmp x-- high_edge_done
+high_edge_done:
+    jmp x-- low_loop
+    jmp low_loop                    ; X wrapped at the decrement above
+high_stay:
+    jmp x-- high_loop
+    jmp high_loop                   ; X wrapped: one cycle lost
