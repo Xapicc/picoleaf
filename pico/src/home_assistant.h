@@ -33,5 +33,6 @@ void home_assistant_on_controller_event(controller_event_t event, uint64_t now_u
 // Computes the next frame (fade or effect) and hands it to the controller, at the controller's rate.
 void home_assistant_render(uint64_t now_us);
 
-// Publishes pending discovery and state messages, one at a time; call every main-loop pass.
+// Blinks the wall for MQTT connection changes and publishes pending discovery and state messages, one
+// at a time. Call every main-loop pass, also when the network couldn't be started, so that shows as a problem.
 void home_assistant_poll(uint64_t now_us);

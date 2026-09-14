@@ -15,6 +15,7 @@ add_executable(canvas_probe
     src/effects.c
     src/layout.c
     src/renderer.c
+    src/connection_watch.c
     src/home_assistant.c
     src/config_record.c
     src/config_flash.c

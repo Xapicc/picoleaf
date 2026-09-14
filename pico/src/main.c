@@ -29,7 +29,7 @@
 #include "net.h"
 #include "uart_decode.h"
 
-#define FIRMWARE_VERSION "0.6.1"
+#define FIRMWARE_VERSION "0.7.0"
 
 // GP2 is header pin 4, next to GND on pin 3.
 #define BUS_PIN 2
@@ -41,6 +41,7 @@
 #define MIN_BAUD 1200
 #define MAX_BAUD 3000000
 #define COMMAND_LINE_MAX 4096
+#define PANEL_LED_TOGGLE_US 125000u
 
 // Stop bits are stretched by the TX program's FIFO checks; 12 bits per byte
 // is a safe upper bound for how long a transmission occupies the line.
@@ -68,6 +69,7 @@ static pull_mode_t pull_mode = PULL_NONE;
 
 static controller_t controller;
 static device_config_t device_config;
+static bool wifi_chip_ready;  // also drives the board LED
 static bool network_ready;
 
 static uint32_t capture_buffer[CAPTURE_WORDS];
@@ -289,6 +291,24 @@ static void report_controller_event(controller_event_t event) {
             break;
         default:
             break;
+    }
+}
+
+// The wall can't show that no panel answers, so the board LED blinks until a layout read succeeds.
+static void update_panel_led(controller_event_t event, uint64_t now_us) {
+    static bool panels_missing, led_on, blink_phase;
+    static uint64_t next_toggle_us;
+    if (!wifi_chip_ready) return;
+    if (event == CONTROLLER_SESSION_FAILED) panels_missing = true;
+    if (event == CONTROLLER_SESSION_OPENED) panels_missing = false;
+    if (panels_missing && now_us >= next_toggle_us) {
+        blink_phase = !blink_phase;
+        next_toggle_us = now_us + PANEL_LED_TOGGLE_US;
+    }
+    bool lit = panels_missing && blink_phase;
+    if (lit != led_on) {
+        led_on = lit;
+        cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, led_on);
     }
 }
 
@@ -622,6 +642,7 @@ int main(void) {
     if (cyw43_arch_init() != 0) {
         printf("NET wifi chip init failed; running without network\n");
     } else {
+        wifi_chip_ready = true;
         network_ready = net_init(&device_config, home_assistant_client_id(), home_assistant_subscription(),
                                  home_assistant_availability_topic(), home_assistant_on_message);
         if (!network_ready) printf("NET could not allocate the MQTT client; running without network\n");
@@ -635,11 +656,10 @@ int main(void) {
         home_assistant_render(now_us);
         controller_event_t event = controller_tick(&controller, now_us, bus_exchange);
         report_controller_event(event);
+        update_panel_led(event, now_us);
         home_assistant_on_controller_event(event, now_us);
-        if (network_ready) {
-            net_poll(now_us);
-            home_assistant_poll(now_us);
-        }
+        if (network_ready) net_poll(now_us);
+        home_assistant_poll(now_us);
 
         int c = getchar_timeout_us(0);
         if (c == PICO_ERROR_TIMEOUT) {

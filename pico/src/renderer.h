@@ -23,6 +23,19 @@ typedef struct {
     light_state_t effect_base;
     effect_memory_t memory;
     bool has_content;  // false until the first fade or effect, so squares keep their own look
+    // Boot shimmer and connection blink. Until Home Assistant takes over they draw over the resting
+    // colours in fade_to, then frames stop so USB colour commands aren't overwritten.
+    bool has_rest;
+    bool startup_active;
+    bool shimmering;
+    bool blink_queued;  // waits for the shimmer to end
+    bool blinking;
+    uint8_t blink_colour[4];
+    unsigned blink_times;
+    uint64_t shimmer_start_us;
+    uint64_t shimmer_duration_us;
+    uint64_t blink_start_us;
+    uint64_t startup_end_us;
 } renderer_t;
 
 void renderer_init(renderer_t *renderer, uint32_t seed);
@@ -39,6 +52,16 @@ void renderer_fade_to(renderer_t *renderer, const uint8_t targets[][4], size_t c
 // Runs an animated effect using `base` for on/off, brightness and colour. Calling it again with the
 // same effect only updates `base`, so animations continue smoothly. EFFECT_SOLID is ignored.
 void renderer_start_effect(renderer_t *renderer, effect_t effect, const light_state_t *base);
+
+// Shimmers for `duration_us`, then fades to `rest`. Ignored once a fade or effect has been set; a later
+// fade or effect ends it.
+void renderer_start_boot_shimmer(renderer_t *renderer, const uint8_t rest[][4], size_t count, uint64_t now_us,
+                                 uint64_t duration_us);
+
+// Flashes every square in `colour` `times` times, now or as soon as a running shimmer ends. A newer
+// blink replaces one that is queued or running. Ignored while there is nothing to return to; a later
+// fade or effect cancels it.
+void renderer_blink(renderer_t *renderer, uint64_t now_us, const uint8_t colour[4], unsigned times);
 
 // Colours for every square at `now_us`. Returns false while nothing has been set yet.
 bool renderer_frame(renderer_t *renderer, uint64_t now_us, uint8_t out[][4]);

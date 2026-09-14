@@ -29,6 +29,14 @@ def lib(build_host_library):
     library.renderer_start_effect.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.POINTER(LightState)]
     library.renderer_frame.argtypes = [ctypes.c_void_p, ctypes.c_uint64, ctypes.POINTER(Rgbw)]
     library.renderer_frame.restype = ctypes.c_bool
+    library.renderer_start_boot_shimmer.argtypes = [
+        ctypes.c_void_p,
+        ctypes.POINTER(Rgbw),
+        ctypes.c_size_t,
+        ctypes.c_uint64,
+        ctypes.c_uint64,
+    ]
+    library.renderer_blink.argtypes = [ctypes.c_void_p, ctypes.c_uint64, ctypes.POINTER(ctypes.c_uint8), ctypes.c_uint]
     return library
 
 
@@ -46,6 +54,13 @@ class Renderer:
     def fade(self, colour: tuple[int, int, int, int], now_us: int, duration_us: int) -> None:
         targets = (Rgbw * self.count)(*[Rgbw(*colour)] * self.count)
         self.lib.renderer_fade_to(self.storage, targets, self.count, now_us, duration_us)
+
+    def boot_shimmer(self, rest: tuple[int, int, int, int], now_us: int, duration_us: int) -> None:
+        targets = (Rgbw * self.count)(*[Rgbw(*rest)] * self.count)
+        self.lib.renderer_start_boot_shimmer(self.storage, targets, self.count, now_us, duration_us)
+
+    def blink(self, now_us: int, colour: tuple[int, int, int, int] = (255, 255, 255, 0), times: int = 1) -> None:
+        self.lib.renderer_blink(self.storage, now_us, Rgbw(*colour), times)
 
     def effect(self, name: str, base: LightState) -> None:
         self.lib.renderer_start_effect(self.storage, EFFECTS.index(name), ctypes.byref(base))
@@ -110,4 +125,89 @@ def test_updating_effect_base_keeps_animation_running(lib):
 def test_solid_is_not_an_animated_effect(lib):
     renderer = Renderer(lib)
     renderer.effect("Solid", LightState(True, 255, 255, 255, 255))
+    assert renderer.frame(SECOND) is None
+
+
+WHITE = (255, 255, 255, 0)
+REST = (128, 128, 128, 0)
+FRAME = 40_000
+
+
+def run(renderer: Renderer, start_us: int, end_us: int) -> list[tuple[int, list | None]]:
+    return [(now, renderer.frame(now)) for now in range(start_us, end_us, FRAME)]
+
+
+def test_boot_shimmer_settles_on_rest_then_stops_sending(lib):
+    renderer = Renderer(lib)
+    renderer.boot_shimmer(REST, 0, 5 * SECOND)
+    shimmer = renderer.frame(2 * SECOND)
+    assert all(green > red for red, green, _, _ in shimmer)
+    frames = run(renderer, 2 * SECOND + FRAME, 8 * SECOND)
+    sent = [(now, frame) for now, frame in frames if frame is not None]
+    assert set(sent[-1][1]) == {REST}
+    # One second of settling after the shimmer, then the wall is left to USB colour commands.
+    assert 6 * SECOND <= sent[-1][0] < 6 * SECOND + FRAME
+    assert all(frame is None for now, frame in frames if now > sent[-1][0])
+    assert all(set(frame) != {WHITE} for _, frame in sent)
+
+
+def test_blink_during_shimmer_waits_for_the_shimmer_to_end(lib):
+    renderer = Renderer(lib)
+    renderer.boot_shimmer(REST, 0, 5 * SECOND)
+    renderer.blink(SECOND)
+    frames = dict(run(renderer, SECOND, 7 * SECOND))
+    white = [now for now, frame in frames.items() if frame is not None and set(frame) == {WHITE}]
+    assert white and min(white) >= 5 * SECOND and max(white) < 5 * SECOND + 200_000
+    assert frames[6 * SECOND + 80_000] is None
+
+
+def test_blink_after_shimmer_flashes_then_returns_to_rest(lib):
+    renderer = Renderer(lib)
+    renderer.boot_shimmer(REST, 0, SECOND)
+    run(renderer, 0, 3 * SECOND)
+    renderer.blink(3 * SECOND)
+    assert set(renderer.frame(3 * SECOND)) == {WHITE}
+    assert set(renderer.frame(3 * SECOND + 200_000)) == {REST}
+    assert renderer.frame(3 * SECOND + 240_000) is None
+
+
+def test_home_assistant_command_ends_shimmer_and_cancels_queued_blink(lib):
+    renderer = Renderer(lib)
+    renderer.boot_shimmer(REST, 0, 5 * SECOND)
+    renderer.blink(SECOND)
+    renderer.fade((255, 0, 0, 0), 2 * SECOND, 0)
+    assert all(set(frame) == {(255, 0, 0, 0)} for _, frame in run(renderer, 2 * SECOND, 8 * SECOND))
+
+
+def test_boot_shimmer_is_ignored_once_home_assistant_has_taken_over(lib):
+    renderer = Renderer(lib)
+    renderer.fade((0, 0, 255, 0), 0, 0)
+    renderer.boot_shimmer(REST, 0, 5 * SECOND)
+    assert set(renderer.frame(SECOND)) == {(0, 0, 255, 0)}
+
+
+def test_repeated_blink_alternates_with_the_underlying_colours(lib):
+    red = (255, 0, 0, 0)
+    renderer = Renderer(lib)
+    renderer.fade(REST, 0, 0)
+    renderer.blink(SECOND, red, 3)
+    shown = [set(renderer.frame(SECOND + step * 100_000)) for step in range(12)]
+    # 200 ms on, 200 ms off, three times; sampled every 100 ms.
+    assert shown == [{red}] * 2 + [{REST}] * 2 + [{red}] * 2 + [{REST}] * 2 + [{red}] * 2 + [{REST}] * 2
+
+
+def test_newer_blink_replaces_a_queued_one(lib):
+    red = (255, 0, 0, 0)
+    renderer = Renderer(lib)
+    renderer.boot_shimmer(REST, 0, 5 * SECOND)
+    renderer.blink(SECOND, red, 3)
+    renderer.blink(2 * SECOND)
+    frames = [frame for _, frame in run(renderer, 2 * SECOND, 7 * SECOND) if frame is not None]
+    assert not any(set(frame) == {red} for frame in frames)
+    assert any(set(frame) == {WHITE} for frame in frames)
+
+
+def test_blink_with_nothing_to_return_to_is_ignored(lib):
+    renderer = Renderer(lib)
+    renderer.blink(SECOND)
     assert renderer.frame(SECOND) is None

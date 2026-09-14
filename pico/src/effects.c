@@ -15,6 +15,9 @@
 #define TWINKLE_DECAY_SECONDS 0.5f
 #define TWINKLE_BACKGROUND 0.3f
 #define FIRE_RESPONSE_SECONDS 0.15f
+#define BOOT_SWEEP_PERIOD 1.6f
+#define BOOT_SHIMMER_PERIOD 0.9f
+#define BOOT_FADE_IN_SECONDS 0.6f
 
 static const char *NAMES[EFFECT_COUNT] = {
     "Solid", "Colour cycle", "Breathe", "Twinkle", "Rainbow wave", "Colour wave", "Ripple", "Fire",
@@ -174,5 +177,22 @@ void effect_render(effect_t effect, uint64_t now_us, const effect_point_t *point
                 break;
         }
         write(rgbw[i], rgb, brightness);
+    }
+}
+
+void effect_render_boot_shimmer(uint64_t elapsed_us, const effect_point_t *points, size_t count, uint8_t rgbw[][4]) {
+    if (count > EFFECT_MAX_SQUARES) count = EFFECT_MAX_SQUARES;
+    float seconds = (float)elapsed_us / 1e6f;
+    float fade_in = clamp01(seconds / BOOT_FADE_IN_SECONDS);
+    for (size_t i = 0; i < count; i++) {
+        // Golden-ratio offsets give neighbouring squares unrelated phases without random state.
+        float offset = wrap((float)i * 0.618034f);
+        float shimmer = 0.5f + 0.5f * sinf(TWO_PI * (seconds / BOOT_SHIMMER_PERIOD + offset));
+        // A bright band sweeps diagonally up the wall; the fourth power keeps it narrow.
+        float band = 0.5f + 0.5f * cosf(TWO_PI * ((points[i].x + points[i].y) * 0.5f - seconds / BOOT_SWEEP_PERIOD));
+        band = band * band * band * band;
+        // Deep green to lime on the band's crest, with a touch of teal from the shimmer.
+        const float rgb[3] = {0.35f * band, 0.25f + 0.45f * shimmer + 0.3f * band, 0.12f * shimmer};
+        write(rgbw[i], rgb, fade_in);
     }
 }

@@ -54,3 +54,7 @@ void effect_memory_init(effect_memory_t *memory, uint32_t seed);
 // Breathe, Twinkle, Colour wave and Ripple, the colour. EFFECT_SOLID renders `base` everywhere.
 void effect_render(effect_t effect, uint64_t now_us, const effect_point_t *points, size_t count,
                    const light_state_t *base, effect_memory_t *memory, uint8_t rgbw[][4]);
+
+// Boot animation, not offered to Home Assistant: shimmering shades of green `elapsed_us` after it
+// started, fading in from dark.
+void effect_render_boot_shimmer(uint64_t elapsed_us, const effect_point_t *points, size_t count, uint8_t rgbw[][4]);

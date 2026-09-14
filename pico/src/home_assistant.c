@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "config_flash.h"
+#include "connection_watch.h"
 #include "effects.h"
 #include "ha_light.h"
 #include "layout.h"
@@ -17,6 +18,12 @@
 #define EFFECT_NAME_MAX 32
 // Spacing between publishes, so a burst after (re)connecting can't exhaust lwIP's buffers.
 #define PUBLISH_INTERVAL_US 25000u
+#define BOOT_SHIMMER_US 5000000u
+#define CONNECTED_BLINK_TIMES 1u
+#define PROBLEM_BLINK_TIMES 3u
+
+static const uint8_t CONNECTED_BLINK_COLOUR[4] = {0xFF, 0xFF, 0xFF, 0x00};
+static const uint8_t PROBLEM_BLINK_COLOUR[4] = {0xFF, 0x00, 0x00, 0x00};
 
 typedef struct {
     bool used;
@@ -52,6 +59,9 @@ static struct {
     uint64_t next_render_us;
     uint32_t published_for_connection;
     uint64_t next_publish_us;
+    bool boot_shimmer_started;
+    connection_watch_t connection_watch;
+    connection_signal_t owed_signal;
 } ha;
 
 void home_assistant_init(controller_t *controller, device_config_t *config, const char *board_id,
@@ -63,6 +73,7 @@ void home_assistant_init(controller_t *controller, device_config_t *config, cons
     ha.wall = LIGHT_DEFAULT_STATE;
     ha.effect = EFFECT_SOLID;
     renderer_init(&ha.renderer, (uint32_t)now_us);
+    connection_watch_init(&ha.connection_watch, now_us);
     snprintf(ha.client_id, sizeof ha.client_id, "canvas_%s", board_id);
     snprintf(ha.base_topic, sizeof ha.base_topic, "canvas/%s", board_id);
     snprintf(ha.subscription, sizeof ha.subscription, "%s/+/set", ha.base_topic);
@@ -95,12 +106,16 @@ static square_t *find_or_add(const uint8_t *uid) {
     return free_slot;
 }
 
-// Fades every square to its own light state (the solid, no-effect picture).
-static void fade_to_square_states(uint64_t now_us, uint32_t transition_ms) {
-    uint8_t targets[CONTROLLER_MAX_SQUARES][4] = {{0}};
+// Each square's own light state (the solid, no-effect picture), in bus order.
+static void square_state_colours(uint8_t targets[][4]) {
     for (size_t index = 0; index < ha.index_count; index++) {
         if (ha.by_index[index] >= 0) ha_light_output(&ha.known[ha.by_index[index]].state, targets[index]);
     }
+}
+
+static void fade_to_square_states(uint64_t now_us, uint32_t transition_ms) {
+    uint8_t targets[CONTROLLER_MAX_SQUARES][4] = {{0}};
+    square_state_colours(targets);
     renderer_fade_to(&ha.renderer, targets, ha.index_count, now_us, (uint64_t)transition_ms * 1000u);
 }
 
@@ -137,6 +152,13 @@ void home_assistant_on_controller_event(controller_event_t event, uint64_t now_u
     mark_everything_pending();
     // Re-map colours to the new bus order, but only if Home Assistant has taken over the squares.
     if (ha.renderer.has_content && ha.effect == EFFECT_SOLID) fade_to_square_states(now_us, 0);
+    if (!ha.boot_shimmer_started) {
+        // Once per boot, when the squares are first known; it settles on the state reported to Home Assistant.
+        ha.boot_shimmer_started = true;
+        uint8_t rest[CONTROLLER_MAX_SQUARES][4] = {{0}};
+        square_state_colours(rest);
+        renderer_start_boot_shimmer(&ha.renderer, rest, ha.index_count, now_us, BOOT_SHIMMER_US);
+    }
 }
 
 static void handle_rotation_command(const char *payload) {
@@ -321,7 +343,21 @@ static bool publish_next(void) {
     return false;
 }
 
+static void signal_connection(uint64_t now_us) {
+    connection_signal_t signal = connection_watch_update(&ha.connection_watch, net_mqtt_connected(), now_us);
+    if (signal != CONNECTION_SIGNAL_NONE) ha.owed_signal = signal;
+    // Wi-Fi can win the race against the layout read; the blink then waits for the shimmer to start.
+    if (ha.owed_signal == CONNECTION_SIGNAL_NONE || !ha.boot_shimmer_started) return;
+    if (ha.owed_signal == CONNECTION_SIGNAL_OK) {
+        renderer_blink(&ha.renderer, now_us, CONNECTED_BLINK_COLOUR, CONNECTED_BLINK_TIMES);
+    } else {
+        renderer_blink(&ha.renderer, now_us, PROBLEM_BLINK_COLOUR, PROBLEM_BLINK_TIMES);
+    }
+    ha.owed_signal = CONNECTION_SIGNAL_NONE;
+}
+
 void home_assistant_poll(uint64_t now_us) {
+    signal_connection(now_us);
     if (!net_mqtt_connected()) return;
     if (ha.published_for_connection != net_connection_count()) {
         ha.published_for_connection = net_connection_count();

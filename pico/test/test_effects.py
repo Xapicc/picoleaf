@@ -53,6 +53,12 @@ def lib(build_host_library):
         ctypes.POINTER(Memory),
         ctypes.POINTER(Rgbw),
     ]
+    library.effect_render_boot_shimmer.argtypes = [
+        ctypes.c_uint64,
+        ctypes.POINTER(Point),
+        ctypes.c_size_t,
+        ctypes.POINTER(Rgbw),
+    ]
     return library
 
 
@@ -172,6 +178,30 @@ def test_fire_burns_hotter_at_the_bottom(lib):
         totals["bottom"] += sum(brightness(frame[i]) for i in bottom) / len(bottom)
         totals["top"] += sum(brightness(frame[i]) for i in top) / len(top)
     assert totals["bottom"] > 1.5 * totals["top"]
+
+
+def boot_shimmer_frame(lib, elapsed_us: int) -> list[tuple[int, int, int, int]]:
+    points, count = wall_points(lib)
+    output = (Rgbw * count)()
+    lib.effect_render_boot_shimmer(elapsed_us, points, count, output)
+    return [tuple(square) for square in output]
+
+
+def test_boot_shimmer_fades_in_from_dark(lib):
+    assert set(boot_shimmer_frame(lib, 0)) == {(0, 0, 0, 0)}
+    assert max(map(brightness, boot_shimmer_frame(lib, 200_000))) < max(
+        map(brightness, boot_shimmer_frame(lib, SECOND))
+    )
+
+
+def test_boot_shimmer_is_moving_shades_of_green(lib):
+    frames = [boot_shimmer_frame(lib, SECOND + step * FRAME) for step in range(50)]
+    for frame in frames:
+        assert all(green > 0 and green >= red and green >= blue for red, green, blue, _ in frame)
+    assert all(len(set(frame)) > 1 for frame in frames)
+    assert frames[0] != frames[5]
+    greens = [green for frame in frames for _, green, _, _ in frame]
+    assert max(greens) - min(greens) > 100
 
 
 def test_twinkle_sparkles_above_the_background(lib):
