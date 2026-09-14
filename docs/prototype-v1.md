@@ -13,8 +13,9 @@ v1 does not light panels on its own. It is the instrument for finding out how to
 | `pico/src/controller.c` | Panel controller: session, layout, hardware IDs, 25 Hz colour frames and polls |
 | `pico/src/uart_decode.c` | Decodes panel replies from the edge recorder on the Pico |
 | `pico/src/net.c`, `home_assistant.c`, `ha_light.c` | Wi-Fi, MQTT and Home Assistant discovery ([home-assistant.md](home-assistant.md)) |
+| `pico/src/layout.c`, `effects.c`, `renderer.c` | Square positions from the layout reply, wall effects, fades |
 | `pico/src/config_record.c`, `config_flash.c` | Wi-Fi/MQTT settings in the last flash sector |
-| `pico/test/test_controller.py`, `test_uart_decode.py`, `test_ha_light.py`, `test_config_record.py` | The pure C modules compiled for the host and driven through ctypes |
+| `pico/test/test_controller.py`, `test_uart_decode.py`, `test_ha_light.py`, `test_config_record.py`, `test_layout_c.py`, `test_effects.py`, `test_renderer.py` | The pure C modules compiled for the host and driven through ctypes |
 | `pico/test/test_pio.py` | Cycle-level emulation of the assembled PIO programs (waveforms, driver release, edge timing) |
 | `tools/canvasbus.py` | Host tool: sends commands, saves captures, decodes UART, `layout`, `stress`, `provision` |
 | `tools/layout.py` | Parses and draws the layout reply |

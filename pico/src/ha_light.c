@@ -69,8 +69,38 @@ bool ha_light_apply_command(light_state_t *state, const char *payload, size_t le
         recognised = true;
     }
 
+    if (find_value(payload, end, "effect") || find_value(payload, end, "transition")) recognised = true;
     if (!recognised) return false;
     *state = updated;
+    return true;
+}
+
+bool ha_light_command_effect(const char *payload, size_t length, char *name, size_t size) {
+    const char *end = payload + length;
+    const char *value = find_value(payload, end, "effect");
+    if (value == NULL || *value != '"') return false;
+    const char *close = memchr(value + 1, '"', (size_t)(end - value - 1));
+    if (close == NULL || (size_t)(close - value - 1) >= size) return false;
+    memcpy(name, value + 1, (size_t)(close - value - 1));
+    name[close - value - 1] = '\0';
+    return true;
+}
+
+bool ha_light_command_transition_ms(const char *payload, size_t length, uint32_t *milliseconds) {
+    const char *end = payload + length;
+    const char *cursor = find_value(payload, end, "transition");
+    if (cursor == NULL || cursor >= end || *cursor < '0' || *cursor > '9') return false;
+    uint64_t whole = 0;
+    while (cursor < end && *cursor >= '0' && *cursor <= '9' && whole < 100000) whole = whole * 10 + (uint64_t)(*cursor++ - '0');
+    uint64_t result = whole * 1000;
+    if (cursor < end && *cursor == '.') {
+        uint64_t scale = 100;
+        for (cursor++; cursor < end && *cursor >= '0' && *cursor <= '9'; cursor++) {
+            result += (uint64_t)(*cursor - '0') * scale;
+            scale /= 10;
+        }
+    }
+    *milliseconds = result > 600000 ? 600000 : (uint32_t)result;
     return true;
 }
 
@@ -78,11 +108,12 @@ static size_t checked_length(int written, size_t size) {
     return written < 0 || (size_t)written >= size ? 0 : (size_t)written;
 }
 
-size_t ha_light_state_json(const light_state_t *state, char *out, size_t size) {
+size_t ha_light_state_json(const light_state_t *state, const char *effect, char *out, size_t size) {
     int written = snprintf(out, size,
                            "{\"state\":\"%s\",\"brightness\":%u,\"color_mode\":\"rgb\",\"color\":{\"r\":%u,\"g\":%u,"
-                           "\"b\":%u}}",
-                           state->on ? "ON" : "OFF", state->brightness, state->red, state->green, state->blue);
+                           "\"b\":%u}%s%s%s}",
+                           state->on ? "ON" : "OFF", state->brightness, state->red, state->green, state->blue,
+                           effect ? ",\"effect\":\"" : "", effect ? effect : "", effect ? "\"" : "");
     return checked_length(written, size);
 }
 
@@ -98,13 +129,35 @@ void ha_light_output(const light_state_t *state, uint8_t rgbw[4]) {
 }
 
 size_t ha_light_discovery_json(const ha_light_discovery_t *light, char *out, size_t size) {
+    static char effects[512];  // static: keeps the discovery call chain small on the 4 KB main stack
+    effects[0] = '\0';
+    if (light->effect_count > 0) {
+        size_t used = (size_t)snprintf(effects, sizeof effects, ",\"effect\":true,\"effect_list\":[");
+        for (size_t i = 0; i < light->effect_count && used < sizeof effects; i++) {
+            used += (size_t)snprintf(effects + used, sizeof effects - used, "%s\"%s\"", i ? "," : "",
+                                     light->effect_names[i]);
+        }
+        if (used + 2 > sizeof effects) return 0;
+        snprintf(effects + used, sizeof effects - used, "]");
+    }
     int written = snprintf(out, size,
                            "{\"name\":\"%s\",\"unique_id\":\"%s\",\"schema\":\"json\",\"command_topic\":\"%s\","
                            "\"state_topic\":\"%s\",\"availability_topic\":\"%s\",\"brightness\":true,"
-                           "\"supported_color_modes\":[\"rgb\"],\"device\":{\"identifiers\":[\"%s\"],"
+                           "\"supported_color_modes\":[\"rgb\"]%s,\"device\":{\"identifiers\":[\"%s\"],"
                            "\"name\":\"Nanoleaf Canvas\",\"manufacturer\":\"FckAhLeaf\","
                            "\"model\":\"Pico W panel controller\",\"sw_version\":\"%s\"}}",
                            light->name, light->unique_id, light->command_topic, light->state_topic,
-                           light->availability_topic, light->device_id, light->firmware_version);
+                           light->availability_topic, effects, light->device_id, light->firmware_version);
+    return checked_length(written, size);
+}
+
+size_t ha_rotation_discovery_json(const char *unique_id, const char *command_topic, const char *state_topic,
+                                  const char *availability_topic, const char *device_id, char *out, size_t size) {
+    int written = snprintf(out, size,
+                           "{\"name\":\"Layout rotation\",\"unique_id\":\"%s\",\"command_topic\":\"%s\","
+                           "\"state_topic\":\"%s\",\"availability_topic\":\"%s\",\"entity_category\":\"config\","
+                           "\"icon\":\"mdi:rotate-right\",\"options\":[\"0\",\"90\",\"180\",\"270\"],"
+                           "\"device\":{\"identifiers\":[\"%s\"]}}",
+                           unique_id, command_topic, state_topic, availability_topic, device_id);
     return checked_length(written, size);
 }

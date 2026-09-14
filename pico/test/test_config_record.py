@@ -15,7 +15,12 @@ class DeviceConfig(ctypes.Structure):
         ("mqtt_port", ctypes.c_uint16),
         ("mqtt_user", ctypes.c_char * 65),
         ("mqtt_password", ctypes.c_char * 65),
+        ("layout_rotation", ctypes.c_uint16),
     ]
+
+
+class DeviceConfigV1(ctypes.Structure):
+    _fields_ = DeviceConfig._fields_[:-1]
 
 
 RECORD_SIZE = 4 + 2 + 2 + ctypes.sizeof(DeviceConfig) + 4
@@ -94,3 +99,49 @@ def test_rejects_invalid_fields(lib, key, value):
 def test_accepts_longest_ssid(lib):
     config = DeviceConfig()
     assert lib.config_set_field(ctypes.byref(config), b"wifi_ssid", b"x" * 32)
+
+
+def crc32(data: bytes) -> int:
+    import zlib
+
+    return zlib.crc32(data)
+
+
+def v1_record(ssid: bytes) -> bytes:
+    payload = DeviceConfigV1()
+    payload.wifi_ssid = ssid
+    payload.mqtt_port = 1883
+    payload.mqtt_user = b"canvas"
+    body = (0x53564E43).to_bytes(4, "little") + (1).to_bytes(2, "little")
+    body += ctypes.sizeof(DeviceConfigV1).to_bytes(2, "little") + bytes(payload)
+    return body + crc32(body).to_bytes(4, "little")
+
+
+def test_version_1_record_still_loads_with_rotation_zero(lib):
+    record = v1_record(b"HomeWifi")
+    decoded = DeviceConfig()
+    decoded.layout_rotation = 180
+    assert lib.config_decode(record, len(record), ctypes.byref(decoded))
+    assert (decoded.wifi_ssid, decoded.mqtt_user, decoded.mqtt_port, decoded.layout_rotation) == (
+        b"HomeWifi",
+        b"canvas",
+        1883,
+        0,
+    )
+
+
+@pytest.mark.parametrize("rotation", ["0", "90", "180", "270"])
+def test_rotation_round_trips(lib, rotation):
+    config = configured(lib)
+    assert lib.config_set_field(ctypes.byref(config), b"layout_rotation", rotation.encode())
+    record = ctypes.create_string_buffer(RECORD_SIZE)
+    lib.config_encode(ctypes.byref(config), record, len(record))
+    decoded = DeviceConfig()
+    assert lib.config_decode(record.raw, RECORD_SIZE, ctypes.byref(decoded))
+    assert decoded.layout_rotation == int(rotation)
+
+
+@pytest.mark.parametrize("rotation", ["45", "360", "-90", ""])
+def test_rejects_other_rotations(lib, rotation):
+    config = configured(lib)
+    assert not lib.config_set_field(ctypes.byref(config), b"layout_rotation", rotation.encode())

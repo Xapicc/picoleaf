@@ -29,7 +29,7 @@
 #include "net.h"
 #include "uart_decode.h"
 
-#define FIRMWARE_VERSION "0.5.2"
+#define FIRMWARE_VERSION "0.6.0"
 
 // GP2 is header pin 4, next to GND on pin 3.
 #define BUS_PIN 2
@@ -394,15 +394,17 @@ static bool handle_network_command(const char *command, char *save) {
             char value[128];
             if (!key || !decode_hex_string(strtok_r(NULL, " \t", &save), value, sizeof value) ||
                 !config_set_field(&device_config, key, value)) {
-                printf("ERR usage: cfg set <wifi_ssid|wifi_password|mqtt_host|mqtt_port|mqtt_user|mqtt_password> "
-                       "<hex value>\n");
+                printf("ERR usage: cfg set <wifi_ssid|wifi_password|mqtt_host|mqtt_port|mqtt_user|mqtt_password|"
+                       "layout_rotation> <hex value>\n");
                 return true;
             }
         } else if (action && strcmp(action, "show") == 0) {
             // Passwords are never echoed back.
-            printf("CFG wifi_ssid=%s wifi_password=%s mqtt_host=%s mqtt_port=%u mqtt_user=%s mqtt_password=%s\n",
+            printf("CFG wifi_ssid=%s wifi_password=%s mqtt_host=%s mqtt_port=%u mqtt_user=%s mqtt_password=%s "
+                   "layout_rotation=%u\n",
                    device_config.wifi_ssid, device_config.wifi_password[0] ? "set" : "unset", device_config.mqtt_host,
-                   device_config.mqtt_port, device_config.mqtt_user, device_config.mqtt_password[0] ? "set" : "unset");
+                   device_config.mqtt_port, device_config.mqtt_user, device_config.mqtt_password[0] ? "set" : "unset",
+                   device_config.layout_rotation);
         } else if (action && strcmp(action, "save") == 0) {
             if (!config_flash_save(&device_config)) {
                 printf("ERR writing settings to flash failed\n");
@@ -615,7 +617,7 @@ int main(void) {
     char board_id[2 * PICO_UNIQUE_BOARD_ID_SIZE_BYTES + 1];
     pico_get_unique_board_id_string(board_id, sizeof board_id);
     for (char *c = board_id; *c; c++) *c = (char)tolower((unsigned char)*c);
-    home_assistant_init(&controller, board_id, FIRMWARE_VERSION);
+    home_assistant_init(&controller, &device_config, board_id, FIRMWARE_VERSION, time_us_64());
 
     if (cyw43_arch_init() != 0) {
         printf("NET wifi chip init failed; running without network\n");
@@ -630,9 +632,10 @@ int main(void) {
     bool overflow = false;
     for (;;) {
         uint64_t now_us = time_us_64();
+        home_assistant_render(now_us);
         controller_event_t event = controller_tick(&controller, now_us, bus_exchange);
         report_controller_event(event);
-        home_assistant_on_controller_event(event);
+        home_assistant_on_controller_event(event, now_us);
         if (network_ready) {
             net_poll(now_us);
             home_assistant_poll(now_us);

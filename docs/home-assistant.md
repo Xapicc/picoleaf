@@ -1,6 +1,6 @@
 # Home Assistant integration
 
-The Pico W runs the Canvas controller and joins Wi-Fi. It shows up in Home Assistant through MQTT discovery as the device **Nanoleaf Canvas**, with one RGB light for the whole wall and one for each square. Verified on 2026-09-14 on the 13-square wall.
+The Pico W runs the Canvas controller and joins Wi-Fi. It shows up in Home Assistant through MQTT discovery as the device **Nanoleaf Canvas**, with one RGB light for the whole wall (with effects), one for each square, and a layout-rotation setting. Transitions fade smoothly. Verified on 2026-09-14 on the 13-square wall.
 
 No passwords are stored in this repository. Wi-Fi and MQTT credentials live only in the Pico's flash and in a root-readable file on the server.
 
@@ -24,8 +24,9 @@ Host: a Raspberry Pi (`<pi-host>`, Debian 13, Docker 29). The Home Assistant fro
 
 | Entity | Controls |
 |---|---|
-| `light.nanoleaf_canvas_wall` | Every square at once. Commands apply to each square's own state, so dimming the wall keeps per-square colours unless a colour is sent too |
+| `light.nanoleaf_canvas_wall` | Every square at once, plus effects. Commands apply to each square's own state, so dimming the wall keeps per-square colours unless a colour is sent too |
 | `light.nanoleaf_canvas_tile_0` … `_12` | One square each: on/off, brightness, RGB |
+| `select.nanoleaf_canvas_layout_rotation` | How the wall hangs relative to square 0: `0`, `90`, `180`, `270` (clockwise). Only affects effects that depend on position. Saved on the Pico. This wall: `180` |
 
 "Tile N" uses the square's bus order at the time it was first discovered (0 = the square the Pico is plugged into; see [panel-bus.md](panel-bus.md#layout-encoding) for how order follows the layout). The **unique ID comes from each square's 16-byte hardware ID**, so moving squares around keeps the same entity, state and automations. Rename entities in Home Assistant if the numbers stop matching the wall.
 
@@ -33,7 +34,27 @@ Behaviour worth knowing:
 - After power-up the squares keep their own default look (white, about half brightness) until Home Assistant sends the first command. The reported state starts as "on, white, brightness 128" to match.
 - Brightness is applied by scaling each square's RGB; the panels' global brightness (`FC 04`) stays at full.
 - Squares that appear later (a re-arranged or extended wall) get the wall's last state if the wall has been commanded, otherwise the default.
-- State is kept in RAM; after a Pico reboot everything starts from the default again.
+- Light state is kept in RAM; after a Pico reboot everything starts from the default again. The layout rotation is stored in flash.
+- **Transitions** (`"transition": seconds` in a command, or the transition option in scenes and automations) fade linearly on the Pico at 25 Hz, for the wall and single squares. The panels' own transition byte isn't used: its unit is far too long (see [panel-bus.md](panel-bus.md#session-reads-brightness-and-colour)).
+
+## Effects
+
+Selected on `light.nanoleaf_canvas_wall` (effect dropdown, scenes, automations). They run on the Pico at 25 Hz; nothing streams over MQTT.
+
+| Effect | Uses the wall's colour | Moves across the wall |
+|---|---|---|
+| Solid | — (stops the effect; each square shows its own state) | — |
+| Colour cycle | no, cycles the hue every 20 s | no |
+| Breathe | yes, 4 s in and out | no |
+| Twinkle | yes, dim background with random white sparkles | no |
+| Rainbow wave | no | left to right, 6 s |
+| Colour wave | yes | crests travel upwards, 3 s |
+| Ripple | yes | rings travel outwards from the centre, 2.5 s |
+| Fire | no | hottest along the bottom |
+
+- Brightness and on/off of the wall apply to effects; changing the wall colour while Breathe, Twinkle, Colour wave or Ripple run changes their colour without restarting them.
+- Controlling a single square stops the effect (the wall state reports `Solid`) so the change is visible.
+- Positions come from the layout reply, parsed on the Pico (`src/layout.c`, a port of `tools/layout.py`). "Up" follows the layout-rotation setting.
 
 ## MQTT topics
 
@@ -42,9 +63,11 @@ Behaviour worth knowing:
 | Topic | Direction | Content |
 |---|---|---|
 | `homeassistant/light/canvas_<board>/<object>/config` | Pico → HA, retained | Discovery, JSON schema, `supported_color_modes: ["rgb"]`, unique ID `canvas_<board>_light_<object>` |
-| `canvas/<board>/<object>/set` | HA → Pico | `{"state":"ON","brightness":0-255,"color":{"r":..,"g":..,"b":..}}`, any subset |
+| `canvas/<board>/<object>/set` | HA → Pico | `{"state":"ON","brightness":0-255,"color":{"r":..,"g":..,"b":..},"effect":"Fire","transition":2}`, any subset; `effect` only on the wall |
 | `canvas/<board>/<object>/state` | Pico → HA, retained | Same shape plus `"color_mode":"rgb"` |
 | `canvas/<board>/status` | Pico → HA, retained | `online`; `offline` as the last will |
+| `homeassistant/select/canvas_<board>/layout_rotation/config` | Pico → HA, retained | Select discovery, options `0 90 180 270` |
+| `canvas/<board>/layout_rotation/set` / `state` | HA → Pico / Pico → HA (retained) | `0`, `90`, `180` or `270` |
 
 ## Broker setup on the server
 
@@ -115,6 +138,8 @@ To check from USB: `send cfg show` (passwords shown only as `set`/`unset`) and `
 | Control from Home Assistant | On/off, colour and brightness for a single square and the wall confirmed by the user |
 | Broker recreated and restarted | LAN MAC unchanged; Pico reconnected 5 s after each, Home Assistant within 10 s; a command sent afterwards worked |
 | Pico on a USB power supply, no computer | Reconnected on its own; commands from Home Assistant worked |
+| Effects (firmware 0.6.0) | All eight effects, colour changes during effects and transitions confirmed by the user; Fire burns upwards with rotation `180` |
+| Settings migration | Flashing 0.6.0 over 0.5.x kept Wi-Fi and MQTT settings; rotation defaulted to `0` and was set to `180` from MQTT, surviving in flash |
 
 ## Operations
 

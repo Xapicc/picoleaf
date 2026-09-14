@@ -72,7 +72,7 @@ So far Canvas squares speak the Shapes panel protocol at 1 Mbaud 8N1 on 3.3 V si
 | **Reply trailer is CRC-16/ARC** (poly 0x8005 reflected, init 0), little-endian, over the bytes after the leading `01`. Verified on both replies | computed |
 | Node 1 (the PSU) does not answer `F8 01 00 81/82` | `addressed-reads-05/09` |
 | **`FC 04 vv` sets global brightness.** `FF` full, `40` dim, `10` looked off | user observation |
-| **`E0 01 05 TT R G B W` sets the square's colour.** `E0 01 05 00 FF 00 00 00` switched to red instantly. `TT` is the transition: `05` gave a fade lasting on the order of a minute or more (yellow, then blue) | user observation, `e001-red-t0`, `e001-blue` |
+| **`E0 01 05 TT R G B W` sets the square's colour.** `E0 01 05 00 FF 00 00 00` switched to red instantly. `TT` is a panel-side transition with a long, possibly non-linear unit: `01` reached blue (not timed), `03` showed no visible change within 12 s, `05` faded over a minute or more, `0A` showed no visible change within 20 s (13 squares, 2026-09-14). The controller firmware always sends `00` and fades on the Pico instead | user observation, `e001-red-t0`, `e001-blue`, transition sequence `20260914-1351*`–`1352*` |
 | `E0 03 05 05 R G B W` (the Shapes capture format) had no visible effect, with or without CRC, PSU slot or `FC 07`/`FC 08` around it | `colour-test*` |
 | `E0 02 05 05 FF 00 FF 00` **dropped the session** (next poll `CC`) — probably a longer 16-bit frame format | `colour-test2` |
 | The poll reply's first byte varies: `10`, `11`, `12`, `20` seen, otherwise `00`. Possibly touch data (unverified) | several `seq` runs |

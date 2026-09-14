@@ -67,6 +67,8 @@ Added 2026-09-14.
 
 **Result (2026-09-14): met**, except that a Wi-Fi outage has not been tested (broker restarts and a power cycle on a USB supply have). Details in [home-assistant.md](home-assistant.md#verification-2026-09-14).
 
+**Effects and transitions (added 2026-09-14, met):** eight effects on the wall light (three of them position-based), smooth transitions for every light, and a layout-rotation select. Streaming from other software and sound-reactive effects are out of scope by choice.
+
 ## Hardware constraint: Pico W only
 
 The Raspberry Pi Pico W (RP2040, B2 chip stepping) is the only active hardware in the project. It does every job:
