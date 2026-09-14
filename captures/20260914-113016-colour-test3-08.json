@@ -1,0 +1,30 @@
+{
+ "command": "tx 20 FC 04 FF",
+ "label": "colour-test3-08",
+ "created": "20260914-113016",
+ "header": {
+  "version": "0.1.0",
+  "pin": "2",
+  "baud": "1000000",
+  "mode": "pp",
+  "pull": "up",
+  "start_level": "1",
+  "tick_hz": "62500000",
+  "edges": "8",
+  "start_us": "906219978",
+  "tx_us": "906219986",
+  "stop_us": "906240122",
+  "tx_bytes": "3",
+  "truncated": "0"
+ },
+ "durations": [
+  639,
+  188,
+  469,
+  187,
+  63,
+  312,
+  94,
+  62
+ ]
+}

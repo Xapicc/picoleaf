@@ -1,0 +1,28 @@
+{
+ "command": "tx 40 C0",
+ "label": "addressed-reads-10",
+ "created": "20260914-112651",
+ "header": {
+  "version": "0.1.0",
+  "pin": "2",
+  "baud": "1000000",
+  "mode": "pp",
+  "pull": "up",
+  "start_level": "1",
+  "tick_hz": "62500000",
+  "edges": "6",
+  "start_us": "700310248",
+  "tx_us": "700310255",
+  "stop_us": "700350367",
+  "tx_bytes": "1",
+  "truncated": "0"
+ },
+ "durations": [
+  624,
+  438,
+  1840,
+  561,
+  64,
+  560
+ ]
+}

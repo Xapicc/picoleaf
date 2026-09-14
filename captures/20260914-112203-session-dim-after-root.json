@@ -1,0 +1,32 @@
+{
+ "command": "tx 20 FC 04 10",
+ "label": "session-dim-after-root",
+ "created": "20260914-112203",
+ "header": {
+  "version": "0.1.0",
+  "pin": "2",
+  "baud": "1000000",
+  "mode": "pp",
+  "pull": "up",
+  "start_level": "1",
+  "tick_hz": "62500000",
+  "edges": "10",
+  "start_us": "412241325",
+  "tx_us": "412241332",
+  "stop_us": "412261470",
+  "tx_bytes": "3",
+  "truncated": "0"
+ },
+ "durations": [
+  637,
+  188,
+  468,
+  188,
+  62,
+  313,
+  94,
+  312,
+  63,
+  187
+ ]
+}

@@ -1,0 +1,28 @@
+$timescale 1ns $end
+$scope module canvas $end
+$var wire 1 ! bus $end
+$upscope $end
+$enddefinitions $end
+#0
+1!
+#1040
+0!
+#8032
+1!
+#34496
+0!
+#43472
+1!
+#44480
+0!
+#53472
+1!
+#73456
+0!
+#82448
+1!
+#86448
+0!
+#95440
+1!
+#20114000

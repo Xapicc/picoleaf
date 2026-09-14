@@ -1,0 +1,32 @@
+{
+ "command": "tx 40 C0",
+ "label": "two-tiles-reads-08",
+ "created": "20260914-114925",
+ "header": {
+  "version": "0.3.0",
+  "pin": "2",
+  "baud": "1000000",
+  "mode": "pp",
+  "pull": "none",
+  "start_level": "1",
+  "tick_hz": "62500000",
+  "edges": "10",
+  "start_us": "1238048",
+  "tx_us": "1238048",
+  "stop_us": "1278160",
+  "tx_bytes": "1",
+  "truncated": "0"
+ },
+ "durations": [
+  71,
+  437,
+  1627,
+  562,
+  63,
+  562,
+  1250,
+  562,
+  251,
+  561
+ ]
+}

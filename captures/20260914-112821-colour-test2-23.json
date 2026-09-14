@@ -1,0 +1,32 @@
+{
+ "command": "tx 20 C0",
+ "label": "colour-test2-23",
+ "created": "20260914-112821",
+ "header": {
+  "version": "0.1.0",
+  "pin": "2",
+  "baud": "1000000",
+  "mode": "pp",
+  "pull": "up",
+  "start_level": "1",
+  "tick_hz": "62500000",
+  "edges": "10",
+  "start_us": "790685368",
+  "tx_us": "790685375",
+  "stop_us": "790705487",
+  "tx_bytes": "1",
+  "truncated": "0"
+ },
+ "durations": [
+  625,
+  438,
+  1854,
+  123,
+  64,
+  123,
+  65,
+  185,
+  65,
+  560
+ ]
+}

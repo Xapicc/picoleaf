@@ -1,0 +1,34 @@
+{
+ "command": "tx 40 F8 02 00 81",
+ "label": "two-tiles-reads-07",
+ "created": "20260914-114925",
+ "header": {
+  "version": "0.3.0",
+  "pin": "2",
+  "baud": "1000000",
+  "mode": "pp",
+  "pull": "none",
+  "start_level": "1",
+  "tick_hz": "62500000",
+  "edges": "12",
+  "start_us": "1191676",
+  "tx_us": "1191677",
+  "stop_us": "1231826",
+  "tx_bytes": "4",
+  "truncated": "0"
+ },
+ "durations": [
+  78,
+  250,
+  407,
+  125,
+  62,
+  375,
+  94,
+  562,
+  94,
+  63,
+  62,
+  375
+ ]
+}

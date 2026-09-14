@@ -1,0 +1,21 @@
+{
+ "command": "cap 1000",
+ "label": "idle-after-probes",
+ "created": "20260914-111810",
+ "header": {
+  "version": "0.1.0",
+  "pin": "2",
+  "baud": "1000000",
+  "mode": "pp",
+  "pull": "none",
+  "start_level": "1",
+  "tick_hz": "62500000",
+  "edges": "0",
+  "start_us": "178561778",
+  "tx_us": "178561778",
+  "stop_us": "179561880",
+  "tx_bytes": "0",
+  "truncated": "0"
+ },
+ "durations": []
+}

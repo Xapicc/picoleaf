@@ -1,0 +1,21 @@
+{
+ "command": "cap 1000",
+ "label": "idle-pullup",
+ "created": "20260914-111811",
+ "header": {
+  "version": "0.1.0",
+  "pin": "2",
+  "baud": "1000000",
+  "mode": "pp",
+  "pull": "up",
+  "start_level": "1",
+  "tick_hz": "62500000",
+  "edges": "0",
+  "start_us": "179680107",
+  "tx_us": "179680107",
+  "stop_us": "180680210",
+  "tx_bytes": "0",
+  "truncated": "0"
+ },
+ "durations": []
+}

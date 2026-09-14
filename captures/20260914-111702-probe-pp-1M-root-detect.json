@@ -1,0 +1,32 @@
+{
+ "command": "tx 100 00",
+ "label": "probe-pp-1M-root-detect",
+ "created": "20260914-111702",
+ "header": {
+  "version": "0.1.0",
+  "pin": "2",
+  "baud": "1000000",
+  "mode": "pp",
+  "pull": "none",
+  "start_level": "1",
+  "tick_hz": "62500000",
+  "edges": "10",
+  "start_us": "112032273",
+  "tx_us": "112032280",
+  "stop_us": "112132398",
+  "tx_bytes": "1",
+  "truncated": "0"
+ },
+ "durations": [
+  624,
+  562,
+  1967650,
+  226392,
+  960573,
+  318799,
+  896636,
+  380207,
+  842492,
+  430560
+ ]
+}

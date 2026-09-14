@@ -1,0 +1,30 @@
+{
+ "command": "tx 300 FC 04 FF",
+ "label": "probe2-pp-1M-pullnone-brightness",
+ "created": "20260914-111843",
+ "header": {
+  "version": "0.1.0",
+  "pin": "2",
+  "baud": "1000000",
+  "mode": "pp",
+  "pull": "none",
+  "start_level": "1",
+  "tick_hz": "62500000",
+  "edges": "8",
+  "start_us": "212801455",
+  "tx_us": "212801462",
+  "stop_us": "213101600",
+  "tx_bytes": "3",
+  "truncated": "0"
+ },
+ "durations": [
+  643,
+  187,
+  469,
+  187,
+  63,
+  312,
+  94,
+  63
+ ]
+}

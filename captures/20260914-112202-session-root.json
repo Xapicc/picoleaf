@@ -1,0 +1,24 @@
+{
+ "command": "tx 20 00",
+ "label": "session-root",
+ "created": "20260914-112202",
+ "header": {
+  "version": "0.1.0",
+  "pin": "2",
+  "baud": "1000000",
+  "mode": "pp",
+  "pull": "up",
+  "start_level": "1",
+  "tick_hz": "62500000",
+  "edges": "2",
+  "start_us": "412061909",
+  "tx_us": "412061916",
+  "stop_us": "412082029",
+  "tx_bytes": "1",
+  "truncated": "0"
+ },
+ "durations": [
+  625,
+  563
+ ]
+}

@@ -1,0 +1,30 @@
+{
+ "command": "tx 300 C0",
+ "label": "probe2-pp-1M-pullnone-poll-after-colour",
+ "created": "20260914-111844",
+ "header": {
+  "version": "0.1.0",
+  "pin": "2",
+  "baud": "1000000",
+  "mode": "pp",
+  "pull": "none",
+  "start_level": "1",
+  "tick_hz": "62500000",
+  "edges": "8",
+  "start_us": "213566937",
+  "tx_us": "213566944",
+  "stop_us": "213867058",
+  "tx_bytes": "1",
+  "truncated": "0"
+ },
+ "durations": [
+  627,
+  438,
+  1856,
+  374,
+  63,
+  125,
+  63,
+  562
+ ]
+}

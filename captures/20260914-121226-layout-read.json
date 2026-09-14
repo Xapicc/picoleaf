@@ -1,0 +1,24 @@
+{
+ "command": "layout 00",
+ "label": "layout-read",
+ "created": "20260914-121226",
+ "header": {
+  "version": "0.3.0",
+  "pin": "2",
+  "baud": "1000000",
+  "mode": "pp",
+  "pull": "none",
+  "start_level": "1",
+  "tick_hz": "62500000",
+  "edges": "2",
+  "start_us": "1383097459",
+  "tx_us": "1383097460",
+  "stop_us": "1383117575",
+  "tx_bytes": "1",
+  "truncated": "0"
+ },
+ "durations": [
+  68,
+  563
+ ]
+}

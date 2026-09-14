@@ -1,0 +1,28 @@
+{
+ "command": "tx 20 C0",
+ "label": "e001-red-t0-15",
+ "created": "20260914-113354",
+ "header": {
+  "version": "0.1.0",
+  "pin": "2",
+  "baud": "1000000",
+  "mode": "pp",
+  "pull": "up",
+  "start_level": "1",
+  "tick_hz": "62500000",
+  "edges": "6",
+  "start_us": "1123232445",
+  "tx_us": "1123232452",
+  "stop_us": "1123252564",
+  "tx_bytes": "1",
+  "truncated": "0"
+ },
+ "durations": [
+  627,
+  438,
+  1876,
+  561,
+  64,
+  561
+ ]
+}

@@ -1,0 +1,32 @@
+{
+ "command": "tx 100 C0",
+ "label": "probe-pp-1M-poll",
+ "created": "20260914-111703",
+ "header": {
+  "version": "0.1.0",
+  "pin": "2",
+  "baud": "1000000",
+  "mode": "pp",
+  "pull": "none",
+  "start_level": "0",
+  "tick_hz": "62500000",
+  "edges": "10",
+  "start_us": "112326334",
+  "tx_us": "112326341",
+  "stop_us": "112426455",
+  "tx_bytes": "1",
+  "truncated": "0"
+ },
+ "durations": [
+  617,
+  8,
+  437,
+  2393353,
+  150998,
+  1001130,
+  273781,
+  934989,
+  338763,
+  883760
+ ]
+}

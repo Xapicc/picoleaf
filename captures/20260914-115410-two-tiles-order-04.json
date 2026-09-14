@@ -1,0 +1,30 @@
+{
+ "command": "tx 20 FC 04 FF",
+ "label": "two-tiles-order-04",
+ "created": "20260914-115410",
+ "header": {
+  "version": "0.3.0",
+  "pin": "2",
+  "baud": "1000000",
+  "mode": "pp",
+  "pull": "none",
+  "start_level": "1",
+  "tick_hz": "62500000",
+  "edges": "8",
+  "start_us": "286186278",
+  "tx_us": "286186278",
+  "stop_us": "286206415",
+  "tx_bytes": "3",
+  "truncated": "0"
+ },
+ "durations": [
+  73,
+  187,
+  469,
+  187,
+  63,
+  312,
+  94,
+  63
+ ]
+}

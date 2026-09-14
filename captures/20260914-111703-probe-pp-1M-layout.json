@@ -1,0 +1,31 @@
+{
+ "command": "tx 100 80",
+ "label": "probe-pp-1M-layout",
+ "created": "20260914-111703",
+ "header": {
+  "version": "0.1.0",
+  "pin": "2",
+  "baud": "1000000",
+  "mode": "pp",
+  "pull": "none",
+  "start_level": "0",
+  "tick_hz": "62500000",
+  "edges": "9",
+  "start_us": "112181501",
+  "tx_us": "112181508",
+  "stop_us": "112281623",
+  "tx_bytes": "1",
+  "truncated": "0"
+ },
+ "durations": [
+  619,
+  8,
+  500,
+  2699042,
+  149933,
+  1000430,
+  276944,
+  932490,
+  340392
+ ]
+}

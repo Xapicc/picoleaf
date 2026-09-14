@@ -1,0 +1,24 @@
+{
+ "command": "tx 300 00",
+ "label": "probe2-pp-1M-pullup-root-detect",
+ "created": "20260914-111845",
+ "header": {
+  "version": "0.1.0",
+  "pin": "2",
+  "baud": "1000000",
+  "mode": "pp",
+  "pull": "up",
+  "start_level": "1",
+  "tick_hz": "62500000",
+  "edges": "2",
+  "start_us": "213976729",
+  "tx_us": "213976736",
+  "stop_us": "214276851",
+  "tx_bytes": "1",
+  "truncated": "0"
+ },
+ "durations": [
+  626,
+  562
+ ]
+}

@@ -1,0 +1,21 @@
+{
+ "command": "cap 8000",
+ "label": "brightness-leadin",
+ "created": "20260914-112002",
+ "header": {
+  "version": "0.1.0",
+  "pin": "2",
+  "baud": "1000000",
+  "mode": "pp",
+  "pull": "up",
+  "start_level": "1",
+  "tick_hz": "62500000",
+  "edges": "0",
+  "start_us": "284094585",
+  "tx_us": "284094585",
+  "stop_us": "292094688",
+  "tx_bytes": "0",
+  "truncated": "0"
+ },
+ "durations": []
+}

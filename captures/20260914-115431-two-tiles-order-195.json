@@ -1,0 +1,32 @@
+{
+ "command": "tx 20 C0",
+ "label": "two-tiles-order-195",
+ "created": "20260914-115431",
+ "header": {
+  "version": "0.3.0",
+  "pin": "2",
+  "baud": "1000000",
+  "mode": "pp",
+  "pull": "none",
+  "start_level": "1",
+  "tick_hz": "62500000",
+  "edges": "10",
+  "start_us": "307607938",
+  "tx_us": "307607938",
+  "stop_us": "307628050",
+  "tx_bytes": "1",
+  "truncated": "0"
+ },
+ "durations": [
+  72,
+  438,
+  1679,
+  562,
+  63,
+  562,
+  1187,
+  561,
+  251,
+  562
+ ]
+}

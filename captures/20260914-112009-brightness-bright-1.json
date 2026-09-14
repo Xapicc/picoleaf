@@ -1,0 +1,30 @@
+{
+ "command": "tx 3000 FC 04 FF",
+ "label": "brightness-bright-1",
+ "created": "20260914-112009",
+ "header": {
+  "version": "0.1.0",
+  "pin": "2",
+  "baud": "1000000",
+  "mode": "pp",
+  "pull": "up",
+  "start_level": "1",
+  "tick_hz": "62500000",
+  "edges": "8",
+  "start_us": "295260389",
+  "tx_us": "295260396",
+  "stop_us": "298260534",
+  "tx_bytes": "3",
+  "truncated": "0"
+ },
+ "durations": [
+  640,
+  188,
+  468,
+  188,
+  62,
+  313,
+  94,
+  62
+ ]
+}

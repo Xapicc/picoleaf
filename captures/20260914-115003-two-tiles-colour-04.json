@@ -1,0 +1,30 @@
+{
+ "command": "tx 20 FC 04 FF",
+ "label": "two-tiles-colour-04",
+ "created": "20260914-115003",
+ "header": {
+  "version": "0.3.0",
+  "pin": "2",
+  "baud": "1000000",
+  "mode": "pp",
+  "pull": "none",
+  "start_level": "1",
+  "tick_hz": "62500000",
+  "edges": "8",
+  "start_us": "39375100",
+  "tx_us": "39375101",
+  "stop_us": "39395237",
+  "tx_bytes": "3",
+  "truncated": "0"
+ },
+ "durations": [
+  77,
+  188,
+  468,
+  188,
+  62,
+  313,
+  94,
+  62
+ ]
+}
