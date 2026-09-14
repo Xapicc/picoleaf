@@ -24,11 +24,11 @@ Addressing is in the base scope rather than a stretch goal because on Shapes, co
 2. **Global controls.** Global brightness and panel-side transitions (transition time × 100 ms).
 3. **Hot-plug.** Detect squares being added or removed at runtime.
 4. **Touch.** Read per-square touch state (hover, down, hold, up) and swipes.
-5. **Network bridge.** Use the Pico W's Wi-Fi to accept a protocol existing tools already speak. Candidates: Nanoleaf extControl v2 on UDP 60222, DDP, E1.31.
+5. **Home Assistant.** Promoted to its own scope phase; see [Home Assistant integration](#home-assistant-integration).
 
 ## Out of scope
 
-- Re-implementing the Control Square's Wi-Fi REST API, app pairing, HomeKit, Matter or the cloud. The streaming bridge in stretch goal 5 is the only exception.
+- Re-implementing the Control Square's Wi-Fi REST API, app pairing, HomeKit, Matter or the cloud. The Home Assistant integration uses MQTT, not an emulation of Nanoleaf's API.
 - Decrypting, modifying or flashing Nanoleaf firmware, whether on the Control Square, its EFR32 or the panels.
 - Panel firmware updates. On Shapes these use the `FE` command; we never send it deliberately.
 - The Control Square's own LEDs, buttons, microphone and light sensor.
@@ -36,6 +36,36 @@ Addressing is in the base scope rather than a stretch goal because on Shapes, co
 - Security research on the device's network services.
 
 The existing docs on the network API and firmware stay as background reference. They are not work items.
+
+## Base scope result (2026-09-14)
+
+Controller firmware 0.4.0 on a 13-square wall:
+
+| Criterion | Result |
+|---|---|
+| 1. Standalone | At power-up the Pico opens the session and reads the layout by itself (`stats`: 13 squares, polling at 25 Hz) |
+| 2. Addressing | Layout read and drawn correctly for 1, 2 and 13 squares, confirmed against the physical wall |
+| 3. Per-square colour | `E0 01` with one entry per square, farthest first; per-square colours confirmed visually on 2 squares and as a moving rainbow on 13 |
+| 4. Sustained updates | `canvasbus.py stress --minutes 10`: 600 s, 14 963 colour frames at 24.9 Hz, 14 963 good polls, 0 sessions lost, longest poll gap 40.2 ms. **PASS.** The user reported it looking fine while it ran (watched part of the run, not all 10 minutes) |
+| 5. Documented | `docs/panel-bus.md`, `docs/prototype-v1.md`, captures in `captures/` |
+
+## Home Assistant integration
+
+Added 2026-09-14.
+
+**Goal:** the wall appears in Home Assistant as one RGB light per square plus one light for the whole wall, controlled over the network with no computer attached to the Pico.
+
+| Decision | Choice | Why |
+|---|---|---|
+| Transport | Pico W Wi-Fi → MQTT with Home Assistant MQTT discovery | Standard, no custom HA code; HA creates the entities from retained discovery messages |
+| Broker | Mosquitto next to Home Assistant, on the same Raspberry Pi | No broker existed; added 2026-09-14 |
+| Entities | One light per square (on/off, brightness, RGB) plus one whole-wall light | User choice |
+| Entity identity | Derived from each square's 16-byte hardware ID (`F8 <i> 82`) | Re-arranging squares keeps automations working |
+| Secrets | Wi-Fi and MQTT credentials entered over USB and stored in the Pico's flash; never in the repo | Coding principles: no committed secrets |
+
+**Definition of done:** after a power cycle with only USB power, the Pico joins Wi-Fi, HA shows 14 lights under one device, and turning a square on, off, dimming or recolouring it from HA changes that square within a second; the Pico reconnects by itself after the broker or Wi-Fi restarts.
+
+**Result (2026-09-14): met**, except that a Wi-Fi outage has not been tested (broker restarts and a power cycle on a USB supply have). Details in [home-assistant.md](home-assistant.md#verification-2026-09-14).
 
 ## Hardware constraint: Pico W only
 
@@ -84,8 +114,8 @@ RP2040 facts that shape the design:
 | 3. Listen | Captures of a square at power-up and idle | Known whether squares talk unprompted, and the idle level |
 | 4. Probe | Responses to Shapes-hypothesis frames (`00`, `80`, `C0`, `FC 04`, `E0 03`) across drive modes and baud rates (**done 2026-09-14: 1 Mbaud 8N1 push-pull, square answers layout, poll, version and ID reads**) | Any reproducible reply or visible reaction; baud rate and framing determined |
 | 5. Command subset | Meaning of enumeration, poll and colour frames, worked out by varying one byte at a time within observed commands | One square set to a chosen colour on command (**met 2026-09-14 with `E0 01`; transition units, W channel and poll byte still open**) |
-| 6. Chain | The same with 2 squares: relaying, addressing order | Two squares set independently |
-| 7. Generate | Firmware runs enumeration and colour updates on its own, without the host tool | Base-scope definition of done met |
+| 6. Chain | The same with 2 squares: relaying, addressing order | Two squares set independently (**met 2026-09-14**) |
+| 7. Generate | Firmware runs enumeration and colour updates on its own, without the host tool | Base-scope definition of done met (**met 2026-09-14**, see below) |
 
 ## Risks
 

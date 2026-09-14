@@ -2,16 +2,17 @@
 
 Reverse engineering the Nanoleaf Canvas (NL29) Control Square.
 
-**Scope:** drive Canvas Light Squares with a Raspberry Pi Pico W (RP2040), with no Nanoleaf Control Square attached. The Pico is the only active hardware; it also serves as the logic analyser. The definition of done, stretch goals, non-goals and work plan are in [docs/scope.md](docs/scope.md).
+**Scope:** drive Canvas Light Squares with a Raspberry Pi Pico W (RP2040), with no Nanoleaf Control Square attached, and control them from Home Assistant. The Pico is the only active hardware; it also serves as the logic analyser. The definition of done, stretch goals, non-goals and work plan are in [docs/scope.md](docs/scope.md).
 
-So far this repo holds a survey of existing public work (compiled 2026-09-14) and an archive of Canvas firmware images. There are no original measurements yet.
+Status (2026-09-14): the Canvas panel bus is decoded well enough to run a 13-square wall from the Pico W (base scope met, 10-minute stress test passed), and the wall is integrated into Home Assistant over MQTT. The repo also holds the survey of public work and an archive of Canvas firmware images.
 
 ## Docs
 
 | File | Covers |
 |---|---|
 | [docs/scope.md](docs/scope.md) | Goal, definition of done, stretch goals, out of scope, decisions, work plan, risks |
-| [docs/prototype-v1.md](docs/prototype-v1.md) | Pico W bus probe: wiring, pin identification, flashing, bring-up runbook, command reference |
+| [docs/prototype-v1.md](docs/prototype-v1.md) | Pico W firmware: wiring, pin identification, flashing, bring-up runbook, command reference |
+| [docs/home-assistant.md](docs/home-assistant.md) | Home Assistant over MQTT: broker setup on the server, provisioning, topics, entities, verification |
 | [docs/hardware.md](docs/hardware.md) | FCC filings, chips on the Control Square, Light Squares, PSU, debug pads, sibling products |
 | [docs/panel-bus.md](docs/panel-bus.md) | Controller ↔ panel protocol: Canvas evidence, the reverse-engineered Shapes bus, Aurora bus, capture plan |
 | [docs/network-api.md](docs/network-api.md) | Discovery, auth, REST API, extControl v2 streaming, SSE/UDP touch events, undocumented commands, client libraries |

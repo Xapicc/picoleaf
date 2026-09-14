@@ -9,9 +9,12 @@ from __future__ import annotations
 
 import argparse
 import bisect
+import colorsys
 import datetime
+import getpass
 import glob
 import json
+import os
 import pathlib
 import statistics
 import sys
@@ -213,11 +216,20 @@ def describe(capture: Capture, baud: int | None, inverted: bool) -> str:
     return "\n".join(out)
 
 
+def unused_capture_path(directory: pathlib.Path, name: str) -> pathlib.Path:
+    """Several captures can share a second and a label; never overwrite an earlier one."""
+    path = directory / f"{name}.json"
+    counter = 2
+    while path.exists():
+        path = directory / f"{name}-{counter}.json"
+        counter += 1
+    return path
+
+
 def save_capture(capture: Capture, command: str, label: str | None) -> pathlib.Path:
     CAPTURE_DIR.mkdir(exist_ok=True)
     stamp = datetime.datetime.now().astimezone().strftime("%Y%m%d-%H%M%S")
-    name = f"{stamp}-{label}" if label else stamp
-    path = CAPTURE_DIR / f"{name}.json"
+    path = unused_capture_path(CAPTURE_DIR, f"{stamp}-{label}" if label else stamp)
     path.write_text(
         json.dumps(
             {
@@ -340,6 +352,116 @@ def read_layout(probe: Probe, rotate_degrees: int) -> None:
         print(f"\nwarning: poll returned {len(poll)} bytes, expected {2 * len(parsed.squares)} for this many squares")
 
 
+# Base-scope criteria (docs/scope.md): colour updates at >= 20 Hz without dropouts.
+MIN_FRAME_RATE_HZ = 20
+# The squares drop the session after ~480 ms without a poll; the controller polls every 40 ms.
+MAX_POLL_GAP_US = 100_000
+
+
+def rainbow_frame(squares: int, seconds: float) -> list[str]:
+    """One RRGGBB per square: a rainbow spread over the squares, cycling every 4 s."""
+    colours = []
+    for index in range(squares):
+        hue = (index / squares + seconds / 4) % 1.0
+        red, green, blue = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
+        colours.append(f"{round(red * 255):02X}{round(green * 255):02X}{round(blue * 255):02X}")
+    return colours
+
+
+def stress_failures(stats: dict[str, int], elapsed_s: float) -> list[str]:
+    failures = []
+    if stats["sessions_lost"] or stats["session_failures"]:
+        failures.append(f"{stats['sessions_lost']} sessions lost, {stats['session_failures']} failed re-opens")
+    frame_rate = stats["frames_sent"] / elapsed_s
+    if frame_rate < MIN_FRAME_RATE_HZ:
+        failures.append(f"frame rate {frame_rate:.1f} Hz < {MIN_FRAME_RATE_HZ} Hz")
+    if stats["max_poll_gap_us"] > MAX_POLL_GAP_US:
+        failures.append(f"longest poll gap {stats['max_poll_gap_us'] / 1000:.1f} ms")
+    return failures
+
+
+def run_stress(probe: Probe, minutes: float, rate_hz: float) -> bool:
+    def stats() -> dict[str, int]:
+        output, _ = probe.command("stats")
+        line = next(text for text in output if text.startswith("STATS "))
+        return {key: int(value) for key, value in (field.split("=", 1) for field in line.split()[1:])}
+
+    probe.command("ctl on")
+    deadline = time.monotonic() + 5
+    while not stats()["session"]:
+        if time.monotonic() > deadline:
+            raise RuntimeError("controller did not open a session within 5 s")
+        time.sleep(0.1)
+    squares = stats()["squares"]
+    probe.command("bright 255")
+    probe.command("stats reset")
+
+    started = time.monotonic()
+    ends = started + minutes * 60
+    next_report = started + 10
+    commands = 0
+    print(f"{squares} squares, sending frames at {rate_hz:g} Hz for {minutes:g} min", flush=True)
+    while (now := time.monotonic()) < ends:
+        probe.command("frame " + " ".join(rainbow_frame(squares, now - started)))
+        commands += 1
+        if now >= next_report:
+            current = stats()
+            elapsed = now - started
+            print(
+                f"{elapsed:6.0f} s  host {commands / elapsed:5.1f} Hz  bus frames {current['frames_sent'] / elapsed:5.1f} Hz"
+                f"  polls ok {current['polls_ok']}  lost {current['sessions_lost']}"
+                f"  max poll gap {current['max_poll_gap_us'] / 1000:.1f} ms",
+                flush=True,
+            )
+            next_report += 10
+        time.sleep(max(0.0, started + commands / rate_hz - time.monotonic()))
+
+    elapsed = time.monotonic() - started
+    final = stats()
+    failures = stress_failures(final, elapsed)
+    print(
+        f"\nfinal: {elapsed:.0f} s, {final['frames_sent']} bus frames ({final['frames_sent'] / elapsed:.1f} Hz), "
+        f"{final['polls_ok']} good polls, {final['sessions_lost']} sessions lost, "
+        f"longest poll gap {final['max_poll_gap_us'] / 1000:.1f} ms"
+    )
+    print("PASS" if not failures else "FAIL: " + "; ".join(failures))
+    return not failures
+
+
+PROVISION_FIELDS = ("wifi_ssid", "wifi_password", "mqtt_host", "mqtt_port", "mqtt_user", "mqtt_password")
+
+
+def provision_commands(settings: dict[str, str]) -> list[str]:
+    """Firmware `cfg set` lines; values are hex-encoded so spaces and any characters survive the line protocol."""
+    unknown = set(settings) - set(PROVISION_FIELDS)
+    if unknown:
+        raise ValueError(f"unknown settings {sorted(unknown)}; expected {PROVISION_FIELDS}")
+    return [f"cfg set {key} {settings[key].encode().hex()}" for key in PROVISION_FIELDS if key in settings]
+
+
+def secret(environment_variable: str, prompt: str) -> str:
+    """From the environment if set (for scripted provisioning), otherwise a hidden prompt."""
+    value = os.environ.get(environment_variable)
+    return value if value is not None else getpass.getpass(prompt)
+
+
+def run_provision(probe: Probe, args: argparse.Namespace) -> None:
+    settings = {
+        "wifi_ssid": args.ssid,
+        "wifi_password": secret("CANVAS_WIFI_PASSWORD", f"Wi-Fi password for {args.ssid}: "),
+        "mqtt_host": args.mqtt_host,
+        "mqtt_port": str(args.mqtt_port),
+        "mqtt_user": args.mqtt_user,
+        "mqtt_password": secret("CANVAS_MQTT_PASSWORD", f"MQTT password for {args.mqtt_user}: "),
+    }
+    for line in provision_commands(settings):
+        probe.command(line)
+    probe.command("cfg save")
+    print("\n".join(probe.command("cfg show")[0]))
+    print("saved; rebooting the Pico to connect")
+    probe.serial.write(b"reboot\n")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", help="serial port (default: the only /dev/cu.usbmodem*)")
@@ -358,6 +480,16 @@ def main() -> None:
         sub.add_argument("--label", help="suffix for the saved capture file")
         sub.add_argument("--baud", type=int, help="decode at this baud instead of the TX baud")
         sub.add_argument("--inverted", action="store_true", help="decode with idle-low polarity")
+
+    provision = commands.add_parser("provision", help="store Wi-Fi and MQTT settings on the Pico W and reboot it")
+    provision.add_argument("--ssid", required=True)
+    provision.add_argument("--mqtt-host", required=True, help="broker IPv4 address")
+    provision.add_argument("--mqtt-port", type=int, default=1883)
+    provision.add_argument("--mqtt-user", required=True)
+
+    stress = commands.add_parser("stress", help="rainbow frames through the controller, then PASS/FAIL")
+    stress.add_argument("--minutes", type=float, default=10.0)
+    stress.add_argument("--rate", type=float, default=30.0, help="frame commands per second from the host")
 
     layout_parser = commands.add_parser("layout", help="read the panel layout and draw it")
     layout_parser.add_argument(
@@ -384,6 +516,15 @@ def main() -> None:
     line = f"cap {getattr(args, 'ms', 0)}"
     if args.action == "tx":
         line = tx_line(args.ms, parse_hex_bytes(args.hex), args.allow_dangerous)
+
+    if args.action == "provision":
+        run_provision(Probe(args.port), args)
+        return
+
+    if args.action == "stress":
+        if not run_stress(Probe(args.port), args.minutes, args.rate):
+            sys.exit(1)
+        return
 
     if args.action == "layout":
         read_layout(Probe(args.port), args.rotate)

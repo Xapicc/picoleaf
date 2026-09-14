@@ -1,10 +1,12 @@
-// Canvas panel bus probe for the Raspberry Pi Pico W (RP2040).
+// Canvas panel controller and bus probe for the Raspberry Pi Pico W (RP2040).
 //
-// Transmits bytes as a single-wire half-duplex UART on one GPIO and records
-// every level change on that same GPIO at ~16 ns resolution. The protocol is
-// unknown, so decoding happens on the host from the raw edge timings
-// (tools/canvasbus.py). Commands are text lines over USB CDC; every command
-// answers with a final "OK" or "ERR <reason>" line.
+// At power-up the controller (controller.c) opens a session with the squares,
+// polls them and pushes colours set over USB or from Home Assistant via MQTT
+// (net.c, home_assistant.c). The probe commands transmit
+// bytes as a single-wire half-duplex UART on the same GPIO and record every
+// level change at ~16 ns resolution for decoding on the host
+// (tools/canvasbus.py); they pause the controller. Commands are text lines over
+// USB CDC; every command answers with a final "OK" or "ERR <reason>" line.
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,21 +17,30 @@
 #include "hardware/clocks.h"
 #include "hardware/dma.h"
 #include "hardware/pio.h"
+#include "hardware/watchdog.h"
+#include "pico/cyw43_arch.h"
+#include "pico/unique_id.h"
 
 #include "bus.pio.h"
+#include "config_flash.h"
+#include "config_record.h"
+#include "controller.h"
+#include "home_assistant.h"
+#include "net.h"
+#include "uart_decode.h"
 
-#define FIRMWARE_VERSION "0.3.0"
+#define FIRMWARE_VERSION "0.5.2"
 
 // GP2 is header pin 4, next to GND on pin 3.
 #define BUS_PIN 2
 
-// 160 KB of the RP2040's 264 KB SRAM. One word per level change.
-#define CAPTURE_WORDS 40000
+// 64 KB of the RP2040's 264 KB SRAM, leaving room for Wi-Fi and lwIP. One word per level change.
+#define CAPTURE_WORDS 16000
 #define MAX_TX_BYTES 512
 #define MAX_LISTEN_MS 30000
 #define MIN_BAUD 1200
 #define MAX_BAUD 3000000
-#define LINE_MAX 4096
+#define COMMAND_LINE_MAX 4096
 
 // Stop bits are stretched by the TX program's FIFO checks; 12 bits per byte
 // is a safe upper bound for how long a transmission occupies the line.
@@ -54,6 +65,10 @@ static uint capture_dma;
 static uint32_t baud = 1000000;
 static drive_mode_t drive_mode = DRIVE_PUSH_PULL;
 static pull_mode_t pull_mode = PULL_NONE;
+
+static controller_t controller;
+static device_config_t device_config;
+static bool network_ready;
 
 static uint32_t capture_buffer[CAPTURE_WORDS];
 static uint32_t tx_words[MAX_TX_BYTES];
@@ -226,6 +241,57 @@ static void run_transaction(const uint8_t *bytes, size_t count, uint32_t listen_
     print_capture(result.words, result.truncated, result.start_us, result.tx_us, result.stop_us, count);
 }
 
+// controller_exchange_fn: sends a frame and decodes the reply on the Pico.
+static size_t bus_exchange(const uint8_t *frame, size_t length, uint32_t listen_ms, uint8_t *reply, size_t reply_max) {
+    transaction_t result = transact(frame, length, listen_ms);
+    static uint8_t values[CONTROLLER_LAYOUT_MAX + MAX_TX_BYTES];
+    static bool stop_ok[CONTROLLER_LAYOUT_MAX + MAX_TX_BYTES];
+    size_t decoded = uart_decode(capture_buffer, result.words, clock_get_hz(clk_sys) / 2, baud, values, stop_ok,
+                                 sizeof values);
+    // Our own frame is recorded too; everything after it is the panels' answer.
+    if (decoded <= length) return 0;
+    size_t reply_length = decoded - length;
+    if (reply_length > reply_max) reply_length = reply_max;
+    memcpy(reply, values + length, reply_length);
+    return reply_length;
+}
+
+static void resume_controller(void) {
+    // The controller speaks the protocol measured at 1 Mbaud push-pull.
+    baud = 1000000;
+    drive_mode = DRIVE_PUSH_PULL;
+    tx_sm_configure();
+    controller.enabled = true;
+    controller.in_session = false;
+    controller.next_session_attempt_us = time_us_64();
+}
+
+// Probe commands would interleave with controller traffic, so they pause it.
+static void pause_controller(void) {
+    if (!controller.enabled) return;
+    controller.enabled = false;
+    printf("CTL paused for probe command; 'ctl on' resumes\n");
+}
+
+static void report_controller_event(controller_event_t event) {
+    switch (event) {
+        case CONTROLLER_SESSION_OPENED:
+            printf("CTL session open, %u squares\n", (unsigned)controller.square_count);
+            break;
+        case CONTROLLER_SESSION_FAILED:
+            printf("CTL no valid layout reply, retrying in 1 s\n");
+            break;
+        case CONTROLLER_SESSION_LOST:
+            printf("CTL session lost, re-reading layout\n");
+            break;
+        case CONTROLLER_UIDS_READY:
+            printf("CTL hardware IDs read for %u squares\n", (unsigned)controller.square_count);
+            break;
+        default:
+            break;
+    }
+}
+
 static int hex_value(char c) {
     if (c >= '0' && c <= '9') return c - '0';
     c = (char)tolower((unsigned char)c);
@@ -288,16 +354,171 @@ static void print_diagnostics(void) {
     printf("DIAG after stop: words=%lu first=0x%08lx\n", (unsigned long)words, (unsigned long)capture_buffer[0]);
 }
 
+// Parses RRGGBB or RRGGBBWW.
+static bool parse_colour(const char *text, uint8_t rgbw[4]) {
+    if (!text) return false;
+    size_t length = strlen(text);
+    if (length != 6 && length != 8) return false;
+    rgbw[3] = 0;
+    for (size_t i = 0; i < length; i += 2) {
+        int high = hex_value(text[i]);
+        int low = hex_value(text[i + 1]);
+        if (high < 0 || low < 0) return false;
+        rgbw[i / 2] = (uint8_t)(high << 4 | low);
+    }
+    return true;
+}
+
+// Decodes a hex string into a NUL-terminated string. Values travel hex-encoded so
+// SSIDs and passwords may contain spaces or any other character.
+static bool decode_hex_string(const char *hex, char *out, size_t out_size) {
+    if (hex == NULL) return false;
+    size_t length = strlen(hex);
+    if (length % 2 != 0 || length / 2 >= out_size) return false;
+    for (size_t i = 0; i < length; i += 2) {
+        int high = hex_value(hex[i]);
+        int low = hex_value(hex[i + 1]);
+        if (high < 0 || low < 0) return false;
+        out[i / 2] = (char)(high << 4 | low);
+    }
+    out[length / 2] = '\0';
+    return true;
+}
+
+// Returns false if `command` is not a network or settings command.
+static bool handle_network_command(const char *command, char *save) {
+    if (strcmp(command, "cfg") == 0) {
+        char *action = strtok_r(NULL, " \t", &save);
+        if (action && strcmp(action, "set") == 0) {
+            char *key = strtok_r(NULL, " \t", &save);
+            char value[128];
+            if (!key || !decode_hex_string(strtok_r(NULL, " \t", &save), value, sizeof value) ||
+                !config_set_field(&device_config, key, value)) {
+                printf("ERR usage: cfg set <wifi_ssid|wifi_password|mqtt_host|mqtt_port|mqtt_user|mqtt_password> "
+                       "<hex value>\n");
+                return true;
+            }
+        } else if (action && strcmp(action, "show") == 0) {
+            // Passwords are never echoed back.
+            printf("CFG wifi_ssid=%s wifi_password=%s mqtt_host=%s mqtt_port=%u mqtt_user=%s mqtt_password=%s\n",
+                   device_config.wifi_ssid, device_config.wifi_password[0] ? "set" : "unset", device_config.mqtt_host,
+                   device_config.mqtt_port, device_config.mqtt_user, device_config.mqtt_password[0] ? "set" : "unset");
+        } else if (action && strcmp(action, "save") == 0) {
+            if (!config_flash_save(&device_config)) {
+                printf("ERR writing settings to flash failed\n");
+                return true;
+            }
+            printf("CFG saved; 'reboot' to apply\n");
+        } else {
+            printf("ERR usage: cfg set <key> <hex> | cfg show | cfg save\n");
+            return true;
+        }
+    } else if (strcmp(command, "net") == 0) {
+        char status[256];
+        if (network_ready) {
+            net_describe(status, sizeof status);
+        } else {
+            snprintf(status, sizeof status, "state=wifi-chip-unavailable");
+        }
+        printf("NET %s\n", status);
+    } else if (strcmp(command, "reboot") == 0) {
+        printf("OK\n");
+        stdio_flush();
+        watchdog_reboot(0, 0, 100);
+        for (;;) sleep_ms(1000);
+    } else {
+        return false;
+    }
+    printf("OK\n");
+    return true;
+}
+
+// Returns false if `command` is not a controller command.
+static bool handle_controller_command(const char *command, char *save) {
+    uint8_t rgbw[4];
+    if (strcmp(command, "ctl") == 0) {
+        char *state = strtok_r(NULL, " \t", &save);
+        if (state && strcmp(state, "on") == 0) {
+            resume_controller();
+        } else if (state && strcmp(state, "off") == 0) {
+            controller.enabled = false;
+        } else {
+            printf("ERR usage: ctl on|off\n");
+            return true;
+        }
+    } else if (strcmp(command, "fill") == 0) {
+        if (!parse_colour(strtok_r(NULL, " \t", &save), rgbw)) {
+            printf("ERR usage: fill RRGGBB[WW]\n");
+            return true;
+        }
+        controller_fill(&controller, rgbw);
+    } else if (strcmp(command, "set") == 0) {
+        uint32_t index;
+        if (!parse_uint(strtok_r(NULL, " \t", &save), &index) || !parse_colour(strtok_r(NULL, " \t", &save), rgbw) ||
+            !controller_set(&controller, index, rgbw)) {
+            printf("ERR usage: set <index 0..%d> RRGGBB[WW]\n", CONTROLLER_MAX_SQUARES - 1);
+            return true;
+        }
+    } else if (strcmp(command, "frame") == 0) {
+        size_t index = 0;
+        for (char *token = strtok_r(NULL, " \t", &save); token; token = strtok_r(NULL, " \t", &save), index++) {
+            if (!parse_colour(token, rgbw) || !controller_set(&controller, index, rgbw)) {
+                printf("ERR frame entry %u: expected RRGGBB[WW], at most %d entries\n", (unsigned)index,
+                       CONTROLLER_MAX_SQUARES);
+                return true;
+            }
+        }
+    } else if (strcmp(command, "bright") == 0) {
+        uint32_t level;
+        if (!parse_uint(strtok_r(NULL, " \t", &save), &level) || level > 255) {
+            printf("ERR usage: bright <0..255>\n");
+            return true;
+        }
+        controller_set_brightness(&controller, (uint8_t)level);
+    } else if (strcmp(command, "stats") == 0) {
+        char *action = strtok_r(NULL, " \t", &save);
+        if (action && strcmp(action, "reset") == 0) {
+            memset(&controller.stats, 0, sizeof controller.stats);
+        } else {
+            const controller_stats_t *stats = &controller.stats;
+            printf("STATS enabled=%d session=%d squares=%u sessions_opened=%lu session_failures=%lu sessions_lost=%lu "
+                   "frames_sent=%lu polls_ok=%lu max_poll_gap_us=%llu last_bad_poll_length=%lu uids_read=%u "
+                   "uid_read_failures=%lu uptime_us=%llu\n",
+                   controller.enabled, controller.in_session, (unsigned)controller.square_count,
+                   (unsigned long)stats->sessions_opened, (unsigned long)stats->session_failures,
+                   (unsigned long)stats->sessions_lost, (unsigned long)stats->frames_sent,
+                   (unsigned long)stats->polls_ok, (unsigned long long)stats->max_poll_gap_us,
+                   (unsigned long)stats->last_bad_poll_length, (unsigned)controller.uids_read,
+                   (unsigned long)stats->uid_read_failures,
+                   (unsigned long long)time_us_64());
+        }
+    } else if (strcmp(command, "layout") == 0) {
+        printf("LAYOUT squares=%u bytes=", (unsigned)controller.square_count);
+        for (size_t i = 0; i < controller.layout_length; i++) printf("%02X", controller.layout[i]);
+        printf("\n");
+    } else {
+        return false;
+    }
+    printf("OK\n");
+    return true;
+}
+
 static void print_info(void) {
-    printf("INFO version=%s pin=%u baud=%lu mode=%s pull=%s level=%d sys_hz=%lu capture_words=%u\n",
+    printf("INFO version=%s pin=%u baud=%lu mode=%s pull=%s level=%d sys_hz=%lu capture_words=%u ctl=%s\n",
            FIRMWARE_VERSION, BUS_PIN, (unsigned long)baud, drive_mode_name(), pull_mode_name(),
-           gpio_get(BUS_PIN), (unsigned long)clock_get_hz(clk_sys), CAPTURE_WORDS);
+           gpio_get(BUS_PIN), (unsigned long)clock_get_hz(clk_sys), CAPTURE_WORDS, controller.enabled ? "on" : "off");
 }
 
 static void handle_command(char *line) {
     char *save = NULL;
     char *command = strtok_r(line, " \t", &save);
     if (!command) return;
+    if (handle_controller_command(command, save)) return;
+    if (handle_network_command(command, save)) return;
+
+    bool probe_uses_bus = strcmp(command, "diag") == 0 || strcmp(command, "baud") == 0 ||
+                          strcmp(command, "mode") == 0 || strcmp(command, "cap") == 0 || strcmp(command, "tx") == 0;
+    if (probe_uses_bus) pause_controller();
 
     if (strcmp(command, "info") == 0) {
         print_info();
@@ -358,7 +579,10 @@ static void handle_command(char *line) {
         }
         run_transaction(bytes, (size_t)count, listen_ms);
     } else if (strcmp(command, "help") == 0) {
-        printf("info | level | baud <bps> | mode pp|od | pull up|down|none | cap <ms> | tx <ms> <hex...> | diag\n");
+        printf("controller: ctl on|off | fill RRGGBB[WW] | set <i> RRGGBB[WW] | frame RRGGBB[WW]... | bright <n> | "
+               "stats [reset] | layout\n"
+               "network: cfg set <key> <hex> | cfg show | cfg save | net | reboot\n"
+               "probe: info | level | baud <bps> | mode pp|od | pull up|down|none | cap <ms> | tx <ms> <hex...> | diag\n");
     } else {
         printf("ERR unknown command '%s' (try help)\n", command);
         return;
@@ -369,33 +593,66 @@ static void handle_command(char *line) {
 int main(void) {
     stdio_init_all();
 
-    // The pin comes up as an input with no pull: nothing is driven until a
-    // command asks for it.
+    // The pin comes up as an input with no pull; the controller starts driving
+    // it once the probe hardware is set up.
     pio_gpio_init(tx_pio, BUS_PIN);
     apply_pull();
 
+    // Claim our state machines before the Wi-Fi driver picks a free one for its own PIO program.
+    pio_sm_claim(tx_pio, TX_SM);
+    pio_sm_claim(capture_pio, CAPTURE_SM);
     tx_pp_offset = add_program_or_panic(tx_pio, &bus_tx_pp_program);
     tx_od_offset = add_program_or_panic(tx_pio, &bus_tx_od_program);
     capture_offset = add_program_or_panic(capture_pio, &edge_capture_program);
     dma_configure();
     tx_sm_configure();
     capture_sm_configure();
+    controller_init(&controller, time_us_64());
 
-    static char line[LINE_MAX];
+    config_defaults(&device_config);
+    if (!config_flash_load(&device_config)) printf("CFG no saved settings; network stays off until 'cfg save'\n");
+
+    char board_id[2 * PICO_UNIQUE_BOARD_ID_SIZE_BYTES + 1];
+    pico_get_unique_board_id_string(board_id, sizeof board_id);
+    for (char *c = board_id; *c; c++) *c = (char)tolower((unsigned char)*c);
+    home_assistant_init(&controller, board_id, FIRMWARE_VERSION);
+
+    if (cyw43_arch_init() != 0) {
+        printf("NET wifi chip init failed; running without network\n");
+    } else {
+        network_ready = net_init(&device_config, home_assistant_client_id(), home_assistant_subscription(),
+                                 home_assistant_availability_topic(), home_assistant_on_message);
+        if (!network_ready) printf("NET could not allocate the MQTT client; running without network\n");
+    }
+
+    static char line[COMMAND_LINE_MAX];
     size_t length = 0;
     bool overflow = false;
     for (;;) {
-        int c = getchar();
+        uint64_t now_us = time_us_64();
+        controller_event_t event = controller_tick(&controller, now_us, bus_exchange);
+        report_controller_event(event);
+        home_assistant_on_controller_event(event);
+        if (network_ready) {
+            net_poll(now_us);
+            home_assistant_poll(now_us);
+        }
+
+        int c = getchar_timeout_us(0);
+        if (c == PICO_ERROR_TIMEOUT) {
+            sleep_us(200);  // don't spin: controller deadlines are tens of ms apart
+            continue;
+        }
         if (c == '\r' || c == '\n') {
             if (overflow) {
-                printf("ERR line longer than %d characters\n", LINE_MAX - 1);
+                printf("ERR line longer than %d characters\n", COMMAND_LINE_MAX - 1);
             } else if (length > 0) {
                 line[length] = '\0';
                 handle_command(line);
             }
             length = 0;
             overflow = false;
-        } else if (length + 1 < LINE_MAX) {
+        } else if (length + 1 < COMMAND_LINE_MAX) {
             line[length++] = (char)c;
         } else {
             overflow = true;

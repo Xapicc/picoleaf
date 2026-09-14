@@ -7,10 +7,31 @@ project(canvas_probe C CXX ASM)
 set(CMAKE_C_STANDARD 11)
 pico_sdk_init()
 
-add_executable(canvas_probe src/main.c)
+add_executable(canvas_probe
+    src/main.c
+    src/controller.c
+    src/uart_decode.c
+    src/ha_light.c
+    src/home_assistant.c
+    src/config_record.c
+    src/config_flash.c
+    src/net.c
+)
+target_include_directories(canvas_probe PRIVATE ${CMAKE_CURRENT_LIST_DIR}/src)  # lwipopts.h
 pico_generate_pio_header(canvas_probe ${CMAKE_CURRENT_LIST_DIR}/src/bus.pio)
 target_compile_options(canvas_probe PRIVATE -Wall -Wextra)
-target_link_libraries(canvas_probe pico_stdlib hardware_pio hardware_dma hardware_clocks)
+target_link_libraries(canvas_probe
+    pico_stdlib
+    hardware_pio
+    hardware_dma
+    hardware_clocks
+    hardware_flash
+    hardware_watchdog
+    pico_flash
+    pico_unique_id
+    pico_cyw43_arch_lwip_poll
+    pico_lwip_mqtt
+)
 
 pico_enable_stdio_usb(canvas_probe 1)
 pico_enable_stdio_uart(canvas_probe 0)

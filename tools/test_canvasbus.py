@@ -9,6 +9,10 @@ from canvasbus import (
     nearest_standard_baud,
     parse_capture,
     parse_hex_bytes,
+    provision_commands,
+    rainbow_frame,
+    stress_failures,
+    unused_capture_path,
 )
 
 TICK_HZ = 62_500_000
@@ -146,3 +150,54 @@ def test_parses_hex_tokens(tokens, expected):
 def test_rejects_odd_hex_digits():
     with pytest.raises(ValueError, match="odd number"):
         parse_hex_bytes(["E0", "3"])
+
+
+def test_capture_path_does_not_overwrite(tmp_path):
+    first = unused_capture_path(tmp_path, "20260914-121755-layout-read")
+    first.write_text("{}")
+    second = unused_capture_path(tmp_path, "20260914-121755-layout-read")
+    second.write_text("{}")
+    assert [first.name, second.name] == ["20260914-121755-layout-read.json", "20260914-121755-layout-read-2.json"]
+    assert unused_capture_path(tmp_path, "20260914-121755-layout-read").name.endswith("-3.json")
+
+
+def test_rainbow_frame_spreads_hues_over_squares():
+    assert rainbow_frame(3, 0) == ["FF0000", "00FF00", "0000FF"]
+    assert rainbow_frame(3, 4) == rainbow_frame(3, 0)  # cycles every 4 s
+
+
+def good_stats(**overrides: int) -> dict[str, int]:
+    stats = {"sessions_lost": 0, "session_failures": 0, "frames_sent": 15_000, "max_poll_gap_us": 41_000}
+    stats.update(overrides)
+    return stats
+
+
+def test_stress_passes_on_clean_run():
+    assert stress_failures(good_stats(), elapsed_s=600) == []
+
+
+@pytest.mark.parametrize(
+    ("overrides", "reason"),
+    [
+        ({"sessions_lost": 1}, "sessions lost"),
+        ({"frames_sent": 11_000}, "frame rate"),
+        ({"max_poll_gap_us": 150_000}, "poll gap"),
+    ],
+)
+def test_stress_fails_on_each_criterion(overrides, reason):
+    failures = stress_failures(good_stats(**overrides), elapsed_s=600)
+    assert len(failures) == 1 and reason in failures[0]
+
+
+def test_provision_commands_hex_encode_values_in_firmware_order():
+    lines = provision_commands({"mqtt_port": "1883", "wifi_ssid": "My Net", "wifi_password": "p w"})
+    assert lines == [
+        "cfg set wifi_ssid " + b"My Net".hex(),
+        "cfg set wifi_password " + b"p w".hex(),
+        "cfg set mqtt_port " + b"1883".hex(),
+    ]
+
+
+def test_provision_rejects_unknown_settings():
+    with pytest.raises(ValueError, match="unknown settings"):
+        provision_commands({"wifi_ssdi": "typo"})

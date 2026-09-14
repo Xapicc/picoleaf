@@ -9,9 +9,15 @@ v1 does not light panels on its own. It is the instrument for finding out how to
 | Path | What |
 |---|---|
 | `pico/src/bus.pio` | PIO programs: push-pull TX, open-drain TX, edge recorder |
-| `pico/src/main.c` | USB command interface, DMA plumbing |
+| `pico/src/main.c` | USB command interface, DMA plumbing, main loop |
+| `pico/src/controller.c` | Panel controller: session, layout, hardware IDs, 25 Hz colour frames and polls |
+| `pico/src/uart_decode.c` | Decodes panel replies from the edge recorder on the Pico |
+| `pico/src/net.c`, `home_assistant.c`, `ha_light.c` | Wi-Fi, MQTT and Home Assistant discovery ([home-assistant.md](home-assistant.md)) |
+| `pico/src/config_record.c`, `config_flash.c` | Wi-Fi/MQTT settings in the last flash sector |
+| `pico/test/test_controller.py`, `test_uart_decode.py`, `test_ha_light.py`, `test_config_record.py` | The pure C modules compiled for the host and driven through ctypes |
 | `pico/test/test_pio.py` | Cycle-level emulation of the assembled PIO programs (waveforms, driver release, edge timing) |
-| `tools/canvasbus.py` | Host tool: sends commands, saves captures, decodes UART |
+| `tools/canvasbus.py` | Host tool: sends commands, saves captures, decodes UART, `layout`, `stress`, `provision` |
+| `tools/layout.py` | Parses and draws the layout reply |
 | `tools/test_canvasbus.py` | Decoder tests |
 | `captures/` | Every capture as `.json` (raw) + `.vcd` (open in PulseView) |
 
@@ -138,7 +144,20 @@ Text lines over USB serial; each reply ends with `OK` or `ERR <reason>`.
 
 | Command | Effect |
 |---|---|
-| `info` | Version, pin, baud, drive mode, pull, current level |
+| **Controller** | |
+| `ctl on\|off` | Resume or stop the controller (probe bus commands pause it) |
+| `fill RRGGBB[WW]` | Every square the same colour |
+| `set <i> RRGGBB[WW]` | One square, bus order |
+| `frame RRGGBB[WW] …` | Squares 0, 1, 2, … in one command |
+| `bright <0-255>` | Panels' global brightness (`FC 04`) |
+| `stats [reset]` | Session, square count, frames, polls, longest poll gap, hardware-ID reads |
+| `layout` | Square count and the raw layout reply the controller last read |
+| **Network** | |
+| `cfg set <key> <hex>` / `cfg show` / `cfg save` | Wi-Fi and MQTT settings; use `canvasbus.py provision` instead of typing hex |
+| `net` | Wi-Fi and MQTT state, address, reconnect count |
+| `reboot` | Restart the Pico |
+| **Probe** | |
+| `info` | Version, pin, baud, drive mode, pull, current level, controller state |
 | `level` | Current line level |
 | `diag` | Bring-up check of the edge recorder with and without DMA |
 | `baud <bps>` | TX bit rate, 1200–3000000 (default 1000000) |
@@ -147,4 +166,4 @@ Text lines over USB serial; each reply ends with `OK` or `ERR <reason>`.
 | `cap <ms>` | Record for up to 30 s |
 | `tx <ms> <hex…>` | Start recording, send up to 512 bytes, keep recording `<ms>` after the frame |
 
-Capture limits: 40,000 level changes per capture, 16 ns resolution (62.5 MHz ticks), timing drift-free across edges (verified in emulation, not yet on hardware).
+Capture limits: 16,000 level changes per capture (reduced from 40,000 in 0.5.0 to leave RAM for Wi-Fi), 16 ns resolution (62.5 MHz ticks), timing drift-free across edges (verified in emulation, not yet on hardware).
