@@ -1,4 +1,4 @@
-# FckAhLeaf
+# picoleaf
 
 Reverse engineering the Nanoleaf Canvas (NL29) Control Square.
 

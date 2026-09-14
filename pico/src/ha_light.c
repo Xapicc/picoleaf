@@ -144,7 +144,7 @@ size_t ha_light_discovery_json(const ha_light_discovery_t *light, char *out, siz
                            "{\"name\":\"%s\",\"unique_id\":\"%s\",\"schema\":\"json\",\"command_topic\":\"%s\","
                            "\"state_topic\":\"%s\",\"availability_topic\":\"%s\",\"brightness\":true,"
                            "\"supported_color_modes\":[\"rgb\"]%s,\"device\":{\"identifiers\":[\"%s\"],"
-                           "\"name\":\"Nanoleaf Canvas\",\"manufacturer\":\"FckAhLeaf\","
+                           "\"name\":\"Nanoleaf Canvas\",\"manufacturer\":\"picoleaf\","
                            "\"model\":\"Pico W panel controller\",\"sw_version\":\"%s\"}}",
                            light->name, light->unique_id, light->command_topic, light->state_topic,
                            light->availability_topic, effects, light->device_id, light->firmware_version);

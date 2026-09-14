@@ -1,5 +1,5 @@
 [project]
-name = "fckahleaf-tools"
+name = "picoleaf-tools"
 version = "0.1.0"
 description = "Host tools for the Nanoleaf Canvas panel bus probe"
 requires-python = ">=3.9"
