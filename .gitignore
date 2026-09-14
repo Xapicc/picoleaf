@@ -9,3 +9,7 @@ pico/backup/
 .pytest_cache/
 .ruff_cache/
 .DS_Store
+
+# Unlabelled captures from one burst at 13:51–13:52 on 2026-09-14, kept locally only
+captures/20260914-1351*
+captures/20260914-1352*
