@@ -6,3 +6,6 @@ pico/build/
 __pycache__/
 
 pico/backup/
+.pytest_cache/
+.ruff_cache/
+.DS_Store

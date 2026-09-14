@@ -4,7 +4,25 @@ Reverse engineering the Nanoleaf Canvas (NL29) Control Square.
 
 **Scope:** drive Canvas Light Squares with a Raspberry Pi Pico W (RP2040), with no Nanoleaf Control Square attached, and control them from Home Assistant. The Pico is the only active hardware; it also serves as the logic analyser. The definition of done, stretch goals, non-goals and work plan are in [docs/scope.md](docs/scope.md).
 
-Status (2026-09-14): the Canvas panel bus is decoded well enough to run a 13-square wall from the Pico W (base scope met, 10-minute stress test passed), and the wall is integrated into Home Assistant over MQTT. The repo also holds the survey of public work and an archive of Canvas firmware images.
+Status (2026-09-14): the Canvas panel bus is decoded well enough to run a 13-square wall from the Pico W (base scope met, 10-minute stress test passed), and the wall is integrated into Home Assistant over MQTT with effects and fades. The repo also holds the survey of public work and an archive of Canvas firmware images.
+
+## Quick start
+
+Host tools and tests (Python ≥ 3.9, [uv](https://docs.astral.sh/uv/), a host C compiler):
+
+```sh
+uv sync
+uv run pytest    # PIO emulation tests are skipped until the firmware has been built once
+```
+
+Firmware (Pico SDK 2.3.1, `arm-none-eabi` toolchain, Ninja):
+
+```sh
+export PICO_SDK_PATH=/path/to/pico-sdk
+cmake -S pico -B pico/build -G Ninja && cmake --build pico/build
+```
+
+CI builds `canvas_probe.uf2` on every push; download it from the workflow run's artifacts. Wiring, flashing and bring-up are in [docs/prototype-v1.md](docs/prototype-v1.md), Wi-Fi/MQTT provisioning in [docs/home-assistant.md](docs/home-assistant.md).
 
 ## Docs
 
@@ -58,3 +76,9 @@ Several sources could not be read during the survey (EEVblog Aurora teardown beh
 
 > [!warning] Safety
 > The panel rail is 42 V DC. Identify pins with a meter before attaching a logic analyser or microcontroller.
+
+## License
+
+MIT, see [LICENSE](LICENSE). `pico/pico_sdk_import.cmake` is copied from the Pico SDK and keeps its BSD-3-Clause license.
+
+This is an independent project, not affiliated with or endorsed by Nanoleaf. "Nanoleaf" and "Canvas" are trademarks of their owner. Nanoleaf firmware images are not distributed here.
