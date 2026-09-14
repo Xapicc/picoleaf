@@ -145,7 +145,9 @@ controller_event_t controller_tick(controller_t *controller, uint64_t now_us, co
             return CONTROLLER_SESSION_LOST;
         }
     }
-    if (controller->brightness_set) {
+    // Squares power up at about half global brightness and keep FC 04 only until their power is cut,
+    // so it goes out with every colour frame; otherwise the RGB scaling from Home Assistant tops out dim.
+    if (controller->brightness_set || controller->colours_set) {
         exchange((const uint8_t[]){0xFC, 0x04, controller->brightness}, 3, 0, reply, sizeof reply);
     }
     if (controller->colours_set) {

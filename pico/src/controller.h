@@ -43,7 +43,8 @@ typedef struct {
     bool enabled;
     bool in_session;
     // Nothing is pushed until a colour or brightness has been set, so squares
-    // keep their own default look after power-up.
+    // keep their own default look after power-up. Colours imply full brightness
+    // unless `bright` set another level.
     bool colours_set;
     bool brightness_set;
     uint8_t brightness;

@@ -32,7 +32,7 @@ Host: a Raspberry Pi (`<pi-host>`, Debian 13, Docker 29). The Home Assistant fro
 
 Behaviour worth knowing:
 - After power-up the squares keep their own default look (white, about half brightness) until Home Assistant sends the first command. The reported state starts as "on, white, brightness 128" to match.
-- Brightness is applied by scaling each square's RGB; the panels' global brightness (`FC 04`) stays at full.
+- Brightness is applied by scaling each square's RGB; the controller sends full global brightness (`FC 04 FF`) with every colour frame, because squares power up at about half and forget `FC 04` when their power is cut.
 - Squares that appear later (a re-arranged or extended wall) get the wall's last state if the wall has been commanded, otherwise the default.
 - Light state is kept in RAM; after a Pico reboot everything starts from the default again. The layout rotation is stored in flash.
 - **Transitions** (`"transition": seconds` in a command, or the transition option in scenes and automations) fade linearly on the Pico at 25 Hz, for the wall and single squares. The panels' own transition byte isn't used: its unit is far too long (see [panel-bus.md](panel-bus.md#session-reads-brightness-and-colour)).
