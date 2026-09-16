@@ -95,7 +95,7 @@ Without a network, `canvasbus.py` drives the wall directly over USB: `fill`, `se
 | [docs/hardware.md](docs/hardware.md) | FCC filings, chips on the Control Square, Light Squares, PSU, debug pads, sibling products |
 | [docs/network-api.md](docs/network-api.md) | The original controller's network side: discovery, auth, REST, extControl v2, touch events |
 | [docs/firmware-and-security.md](docs/firmware-and-security.md) | Firmware history, update delivery, OS evidence, CVEs, reset/pairing, GPL status |
-| [docs/open-questions.md](docs/open-questions.md) | What is still unknown, grouped by whether it blocks the scope |
+| [docs/open-questions.md](docs/open-questions.md) | What is still unknown — touch, hot-plug signalling, the transition unit — and what has been answered |
 | `captures/` | Every bench capture as `.json` (raw) plus `.vcd` (open in PulseView) |
 | `firmware/canvas/` | 63 Canvas firmware images (1.1.0–12.4.1), `SHA256SUMS`, `manifest.tsv`. The images are git-ignored |
 
