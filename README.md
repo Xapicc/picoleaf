@@ -33,7 +33,7 @@ Not there: touch input, the Nanoleaf app, HomeKit, Matter, sound-reactive effect
 | 2.4 GHz Wi-Fi, an MQTT broker, Home Assistant | Only for the Home Assistant half; the wall can also be driven over USB |
 
 > [!WARNING]
-> **The panel rail is 42 V DC and sits next to the 3.3 V data contact.** The RP2040 is not 5 V tolerant, and while the Pico is on USB your computer is in the fault path. Identify every contact with a meter before connecting anything: [prototype-v1.md, step 1](docs/prototype-v1.md#step-1--identify-the-linker-contacts-multimeter).
+> **The panel rail is 42 V DC, on the middle contact — right between the two you solder to.** The RP2040 is not 5 V tolerant, and while the Pico is on USB your computer is in the fault path. Identify every contact with a meter before connecting anything: [prototype-v1.md, step 1](docs/prototype-v1.md#step-1--identify-the-linker-contacts-multimeter).
 
 ## How it works
 
@@ -41,15 +41,21 @@ Not there: touch input, the Nanoleaf app, HomeKit, Matter, sound-reactive effect
     ┌──────────┐   Wi-Fi    ┌─────────────┐   MQTT    ┌────────────────┐
     │  Pico W  │───────────►│ MQTT broker │──────────►│ Home Assistant │
     └────┬─────┘            └─────────────┘           └────────────────┘
-         │  GND ─────────────── GND  ┐
-         │  GP2 ──[ 330 Ω ]──── DATA ├─ one linker, into any square's edge
-         │                      42 V ┘ (left unconnected, insulated)
+         │
+         │   the three contacts of one linker, pushed into any square's edge:
+         │
+         │   GP2 ──[ 330 Ω ]──── DATA   (top pad)
+         │                       42 V   (middle pad) — cut short, insulated
+         │   GND ─────────────── GND    (bottom pad)
+         │
     ┌────┴──────┬───────────┬───────────┬── … up to a whole wall
     │ square 0  │ square 1  │ square 2  │        ▲
     └───────────┴───────────┴───────────┘        └── stock 42 V PSU, in any edge
 ```
 
-Each square edge has three contacts: GND, ~40 V and one data line. Squares speak a **single-wire half-duplex UART at 1 Mbaud, 3.3 V**, relayed neighbour to neighbour. They never start an exchange — they only answer. So the Pico:
+Each square edge has three contacts: one data line and GND on the outside, **the 42 V supply in the middle, between the two wires you actually use**. Only the outer two reach the Pico; the supply wire is cut short and insulated. Which outer pad is which is not printed anywhere, so it has to be metered — on this bench it came out as DATA on top and GND on the bottom.
+
+Squares speak a **single-wire half-duplex UART at 1 Mbaud, 3.3 V**, relayed neighbour to neighbour. They never start an exchange — they only answer. So the Pico:
 
 1. **opens a session** (`00`, then `80`) and gets back a depth-first description of the wall's shape,
 2. **polls** (`C0`) at least every 450 ms, or the squares drop the session,

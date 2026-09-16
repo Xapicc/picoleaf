@@ -45,10 +45,12 @@ Raspberry Pi Pico W (RP2040), one resistor (220–470 Ω, 330 Ω is ideal), a sp
 ```text
                      Light Square
                  ┌───────────────────┐
-  Canvas PSU ───►│ edge A      edge B│◄── linker ── GND ───────────── Pico pin 3 (GND)
-                 │                   │         ├─ DATA ──[330 Ω]─── Pico pin 4 (GP2)
-                 └───────────────────┘         └─ ~40 V ── not connected, insulated
+  Canvas PSU ───►│ edge A      edge B│◄── linker ─┬─ DATA  (top)    ──[330 Ω]─ Pico pin 4 (GP2)
+                 │                   │            ├─ ~40 V (middle) ── cut short, insulated
+                 └───────────────────┘            └─ GND   (bottom) ────────── Pico pin 3 (GND)
 ```
+
+The supply sits on the **centre** contact, between the two wires that go to the Pico. Top/bottom is the pad order as held on this bench (step 1); it is not marked on the part, so meter it every time.
 
 The Pico is powered and controlled over USB from the Mac. GP2 is an input with no pull at boot and is only driven during a `tx` command.
 
